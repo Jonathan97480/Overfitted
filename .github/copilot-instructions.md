@@ -30,6 +30,13 @@
 - Ne jamais bloquer l’UI sur une tâche longue (toujours async côté backend).
 
 ## Pour aller plus loin
+- **Workflow CI/CD Overfitted** :
+  1. Installe une lib →
+  2. Teste (`pytest` ou tests front) →
+  3. Commit si tout passe →
+  4. Ajoute une fonctionnalité →
+  5. Teste à nouveau →
+  6. Commit seulement si tout est vert.
 - Pour toute règle ou contexte, commence par lire/mettre à jour PROJECT_CONTEXT.md.
 - Pour conventions de code, voir section "CODING STANDARDS" dans PROJECT_CONTEXT.md.
 - Pour guidelines UI, voir section "DESIGN GUIDELINES" dans PROJECT_CONTEXT.md.
