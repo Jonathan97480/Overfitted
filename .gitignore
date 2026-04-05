@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# FastAPI
+instance/
+
+# VSCode
+.vscode/
+
+# Docker
+*.pid
+
+# Node.js
+node_modules/
+frontend/node_modules/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Build
+/dist/
+/build/
+
+# Env
+.env.*

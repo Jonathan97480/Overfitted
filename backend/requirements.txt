@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+sqladmin
+pillow
+rembg
+vtracer
+redis
+celery
+httpx
+stripe
+printful-python
+scikit-image
+opencv-python
+langchain
+openai
