@@ -513,6 +513,11 @@ class ProductOut(BaseModel):
     shop_margin_rate: float
     tva_rate: float
     price: float  # TTC calculé
+    # Champs design / mockup
+    printful_catalog_product_id: Optional[int] = None
+    design_url: Optional[str] = None
+    mockup_url: Optional[str] = None
+    placement_json: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -525,6 +530,10 @@ class ProductCreate(BaseModel):
     printful_cost_ht: float = 0.0
     shop_margin_rate: float = 0.30
     tva_rate: float = 0.20
+    printful_catalog_product_id: Optional[int] = None
+    design_url: Optional[str] = None
+    mockup_url: Optional[str] = None
+    placement_json: Optional[str] = None
 
 
 class ProductUpdate(BaseModel):
@@ -535,6 +544,10 @@ class ProductUpdate(BaseModel):
     printful_cost_ht: Optional[float] = None
     shop_margin_rate: Optional[float] = None
     tva_rate: Optional[float] = None
+    printful_catalog_product_id: Optional[int] = None
+    design_url: Optional[str] = None
+    mockup_url: Optional[str] = None
+    placement_json: Optional[str] = None
 
 
 @router.get("/products", response_model=list[ProductOut], dependencies=[Depends(verify_admin_token)])
@@ -762,7 +775,108 @@ async def printful_catalog_product_detail(product_id: int, db: DBDep) -> dict:
         raise HTTPException(status_code=status_code, detail=str(exc))
 
 
-class VariantInfo(BaseModel):
+# ─── Génération de mockup Printful (Mockup Generator API) ──────────────────
+
+class GenerateMockupRequest(BaseModel):
+    """Paramètres de génération d'un aperçu produit via Printful Mockup Generator."""
+    printful_catalog_product_id: int
+    variant_id: int               # ID variant Printful (int)
+    design_url: str               # URL publique du fichier artwork
+    placement: str = "front"      # front | back | sleeve_left | sleeve_right
+    area_width: int = 1800        # Largeur zone impression (pixels)
+    area_height: int = 2400       # Hauteur zone impression (pixels)
+    design_width: Optional[int] = None   # Largeur du design dans la zone
+    design_height: Optional[int] = None  # Hauteur du design dans la zone
+    position_top: int = 0         # Déport vertical depuis le haut de la zone
+    position_left: int = 0        # Déport horizontal depuis la gauche de la zone
+
+
+@router.post("/catalog/generate-mockup", dependencies=[Depends(verify_admin_token)])
+async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
+    """Génère un aperçu haute résolution via Printful Mockup Generator.
+
+    Appelle create_mockup_task puis poll get_mockup_task jusqu'à completion.
+    Retourne { mockup_url, placement_json } à sauvegarder sur le produit.
+    """
+    import asyncio
+    import json as _json
+    from app.services.printful.client import (
+        create_mockup_task,
+        get_mockup_task,
+        resolve_api_key,
+    )
+
+    try:
+        api_key = await resolve_api_key(db)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    # Construire la position optionnelle
+    position: dict | None = None
+    if body.design_width:
+        position = {
+            "area_width": body.area_width,
+            "area_height": body.area_height,
+            "width": body.design_width,
+            "height": body.design_height or body.design_width,
+            "top": body.position_top,
+            "left": body.position_left,
+        }
+
+    try:
+        task_resp = await create_mockup_task(
+            api_key=api_key,
+            product_id=body.printful_catalog_product_id,
+            variant_ids=[body.variant_id],
+            image_url=body.design_url,
+            placement=body.placement,
+            position=position,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
+
+    task_key = task_resp.get("result", {}).get("task_key")
+    if not task_key:
+        raise HTTPException(status_code=502, detail="Printful n'a pas retourné de task_key.")
+
+    # Polling jusqu'à completion (max 30s — 15 essais × 2s)
+    mockup_url: str | None = None
+    for _ in range(15):
+        await asyncio.sleep(2)
+        try:
+            result = await get_mockup_task(api_key, task_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
+        task_status = result.get("result", {}).get("status")
+        if task_status == "completed":
+            mockups = result.get("result", {}).get("mockups", [])
+            if mockups:
+                mockup_url = (
+                    mockups[0].get("mockup_url")
+                    or ((mockups[0].get("extra") or [{}])[0]).get("url")
+                )
+            break
+        elif task_status == "failed":
+            raise HTTPException(status_code=502, detail="Printful a échoué à générer le mockup.")
+
+    if not mockup_url:
+        raise HTTPException(status_code=504, detail="Timeout : la génération du mockup a pris trop de temps.")
+
+    placement_data = {
+        "placement": body.placement,
+        "design_url": body.design_url,
+        "area_width": body.area_width,
+        "area_height": body.area_height,
+        "design_width": body.design_width,
+        "design_height": body.design_height,
+        "position_top": body.position_top,
+        "position_left": body.position_left,
+    }
+
+    return {"mockup_url": mockup_url, "placement_json": placement_data}
+
+
     id: int
     name: str   # ex: "Black / S"
     price: str  # coût Printful HT
@@ -772,6 +886,7 @@ class AddToStoreRequest(BaseModel):
     name: str
     variants: List[VariantInfo]  # variants catalogue sélectionnés (avec détails)
     thumbnail: Optional[str] = None
+    catalog_product_id: Optional[int] = None  # ID produit catalogue Printful (pour mockup)
 
 
 @router.post("/printful/store-products", dependencies=[Depends(verify_admin_token)])
@@ -798,6 +913,7 @@ async def add_printful_product_to_store(body: AddToStoreRequest, db: DBDep) -> d
                 printful_variant_id=variant_id_str,
                 image_url=body.thumbnail,
                 printful_cost_ht=printful_cost,
+                printful_catalog_product_id=body.catalog_product_id,
                 price=_compute_price_ttc(0.0, printful_cost, 0.30, 0.20),
             ))
             synced += 1

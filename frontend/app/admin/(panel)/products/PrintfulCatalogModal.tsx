@@ -93,8 +93,9 @@ export function PrintfulCatalogModal({ open, onClose }: Props) {
         const selectedVariantObjects = variants.filter((v) => selectedVariantIds.has(v.id));
         try {
             const r = await addToStore({
-                name: customName || selectedProduct.model,
+                name: customName || selectedProduct.name || selectedProduct.model,
                 thumbnail: selectedProduct.image,
+                catalog_product_id: selectedProduct.id,
                 variants: selectedVariantObjects.map((v) => ({
                     id: v.id,
                     name: `${v.color} / ${v.size}`,

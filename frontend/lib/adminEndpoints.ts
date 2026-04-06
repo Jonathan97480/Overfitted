@@ -66,6 +66,14 @@ export interface ProductOut {
     tva_rate: number;
     /** Prix TTC calculé = (design + printful) × (1+marge) × (1+TVA) */
     price: number;
+    /** ID produit catalogue Printful (pour Mockup Generator API) */
+    printful_catalog_product_id: number | null;
+    /** URL du fichier artwork brut (envoyé à Printful à la commande) */
+    design_url: string | null;
+    /** Aperçu haute résolution généré par Printful Mockup Generator */
+    mockup_url: string | null;
+    /** JSON de positionnement (placement, area, top, left, width, height) */
+    placement_json: string | null;
 }
 
 export interface PrintfulCatalogProduct {
@@ -345,6 +353,10 @@ const adminApiExtended = adminApi.injectEndpoints({
                 printful_cost_ht?: number;
                 shop_margin_rate?: number;
                 tva_rate?: number;
+                printful_catalog_product_id?: number | null;
+                design_url?: string | null;
+                mockup_url?: string | null;
+                placement_json?: string | null;
             }
         >({
             query: ({ id, ...body }) => ({
@@ -491,10 +503,27 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         addPrintfulProductToStore: build.mutation<
             { store_product_id: number | null; synced: number },
-            { name: string; variants: { id: number; name: string; price: string }[]; thumbnail?: string }
+            { name: string; variants: { id: number; name: string; price: string }[]; thumbnail?: string; catalog_product_id?: number }
         >({
             query: (body) => ({ url: "/printful/store-products", method: "POST", body }),
             invalidatesTags: ["Product"],
+        }),
+        generateMockup: build.mutation<
+            { mockup_url: string; placement_json: Record<string, unknown> },
+            {
+                printful_catalog_product_id: number;
+                variant_id: number;
+                design_url: string;
+                placement?: string;
+                area_width?: number;
+                area_height?: number;
+                design_width?: number;
+                design_height?: number;
+                position_top?: number;
+                position_left?: number;
+            }
+        >({
+            query: (body) => ({ url: "/catalog/generate-mockup", method: "POST", body }),
         }),
     }),
 });
@@ -537,4 +566,5 @@ export const {
     useBrowsePrintfulCatalogQuery,
     useGetPrintfulCatalogProductQuery,
     useAddPrintfulProductToStoreMutation,
+    useGenerateMockupMutation,
 } = adminApiExtended;

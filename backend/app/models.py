@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -71,9 +71,30 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     printful_variant_id = Column(String, nullable=False, unique=True)
-    price = Column(Float, nullable=False)
     category = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+
+    # ── Décomposition du prix ──────────────────────────────────────────────
+    # design_price_ht  : prix HT fixé pour le design (travail créatif)
+    # printful_cost_ht : coût HT Printful = article + impression
+    # shop_margin_rate : marge boutique en décimal (ex: 0.30 = 30 %)
+    # tva_rate         : taux TVA (default 0.20 = 20 %)
+    # price            : prix TTC calculé et stocké = ceil(base_ht * (1+margin) * (1+tva), 2)
+    design_price_ht = Column(Float, nullable=False, default=0.0)
+    printful_cost_ht = Column(Float, nullable=False, default=0.0)
+    shop_margin_rate = Column(Float, nullable=False, default=0.30)
+    tva_rate = Column(Float, nullable=False, default=0.20)
+    price = Column(Float, nullable=False, default=0.0)  # TTC calculé
+
+    # ── Design + mockup ────────────────────────────────────────────────────
+    # printful_catalog_product_id : ID du produit catalogue Printful (pour Mockup Generator API)
+    # design_url  : URL du fichier artwork brut à envoyer à Printful lors de la commande
+    # mockup_url  : aperçu haute résolution généré par Printful Mockup Generator
+    # placement_json : JSON de positionnement (placement, area, top, left, width, height)
+    printful_catalog_product_id = Column(Integer, nullable=True)
+    design_url = Column(String, nullable=True)
+    mockup_url = Column(String, nullable=True)
+    placement_json = Column(Text, nullable=True)
 
 
 class CatalogueStatus(str, enum.Enum):

@@ -222,15 +222,25 @@ async def create_mockup_task(
     variant_ids: list[int],
     image_url: str,
     format_: str = "jpg",
+    placement: str = "front",
+    position: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """POST /mockup-generator/create-task/{product_id} — démarre la génération.
 
+    placement : emplacement d'impression (front | back | sleeve_left | sleeve_right…)
+    position  : optionnel — dict {area_width, area_height, width, height, top, left}
+                Si absent, Printful utilise le positionnement par défaut du template.
+
     Retourne { result: { task_key: "gt-...", status: "pending" } }
     """
+    file_entry: dict[str, Any] = {"placement": placement, "image_url": image_url}
+    if position:
+        file_entry["position"] = position
+
     payload: dict[str, Any] = {
         "variant_ids": variant_ids,
         "format": format_,
-        "files": [{"placement": "front", "image_url": image_url}],
+        "files": [file_entry],
     }
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(
