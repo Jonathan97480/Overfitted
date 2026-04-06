@@ -64,6 +64,17 @@ export default function AdminLoginPage() {
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Champ username caché requis pour l'accessibilité (gestionnaires de mots de passe) */}
+          <input
+            type="text"
+            name="username"
+            value="admin"
+            autoComplete="username"
+            readOnly
+            className="sr-only"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
           <div>
             <label
               htmlFor="password"

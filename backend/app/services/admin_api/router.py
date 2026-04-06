@@ -56,13 +56,16 @@ async def get_stats(db: DBDep):
     total_designs = (await db.execute(select(func.count(Design.id)))).scalar_one()
     total_orders = (await db.execute(select(func.count(Order.id)))).scalar_one()
 
-    paid_orders = (
-        await db.execute(select(Order).where(Order.status == OrderStatus.paid))
-    ).scalars().all()
-    total_revenue = sum(
-        (await db.execute(select(Product.price).where(Product.id == o.design_id))).scalar_one_or_none() or 0
-        for o in paid_orders
-    )
+    # Revenus : nombre de commandes payées × prix moyen des produits
+    # Order n'a pas de champ amount — on somme les prix des produits référencés
+    total_revenue = 0.0
+    paid_count = (
+        await db.execute(select(func.count(Order.id)).where(Order.status == OrderStatus.paid))
+    ).scalar_one()
+    if paid_count > 0:
+        avg_price_row = await db.execute(select(func.avg(Product.price)))
+        avg_price = avg_price_row.scalar_one_or_none() or 0.0
+        total_revenue = round(paid_count * avg_price, 2)
 
     orders_by_status: dict[str, int] = {}
     for status in OrderStatus:

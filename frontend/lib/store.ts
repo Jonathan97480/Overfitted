@@ -3,12 +3,12 @@ import { adminApi } from "./adminApi";
 import { adminAuthSlice } from "./adminAuthSlice";
 
 export const store = configureStore({
-  reducer: {
-    adminAuth: adminAuthSlice.reducer,
-    [adminApi.reducerPath]: adminApi.reducer,
-  },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(adminApi.middleware),
+    reducer: {
+        adminAuth: adminAuthSlice.reducer,
+        [adminApi.reducerPath]: adminApi.reducer,
+    },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware().concat(adminApi.middleware),
 });
 
 export type RootState = ReturnType<typeof store.getState>;
