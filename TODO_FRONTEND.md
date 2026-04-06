@@ -311,7 +311,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [x] **Page `/admin/invoices`** — toolbar : date-range picker + search (email ou n° facture)
 - [x] **`InvoicesTable`** — colonnes : N° Facture | Date | Client | Commande | Montant HT | TVA | Montant TTC | Actions
   - Bouton **Télécharger PDF** par ligne → `GET /commerce/invoice/{order_id}`
-- [ ] **Bouton "Exporter tout (ZIP)"** — télécharge toutes les factures de la période sélectionnée
+- [x] **Bouton "Exporter tout (ZIP)"** — télécharge toutes les factures de la période sélectionnée
 
 ---
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Search, Plus, Loader2, X, ExternalLink } from "lucide-react";
+import { FileText, Download, Search, Plus, Loader2, X, ExternalLink, Archive } from "lucide-react";
 import {
     useListInvoicesQuery,
     useCreateInvoiceMutation,
@@ -409,6 +409,31 @@ export default function AdminInvoicesPage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [showCreate, setShowCreate] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+
+    async function handleExportZip() {
+        setIsExporting(true);
+        try {
+            const token = getToken();
+            const params = new URLSearchParams();
+            if (search) params.set("search", search);
+            if (dateFrom) params.set("date_from", dateFrom);
+            if (dateTo) params.set("date_to", dateTo);
+            const url = `${NEXT_PUBLIC_API_URL}/api/admin/invoices/export?${params.toString()}`;
+            const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) throw new Error("Export échoué");
+            const blob = await r.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const today = new Date().toISOString().slice(0, 10);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = `factures-${today}.zip`;
+            a.click();
+            URL.revokeObjectURL(blobUrl);
+        } finally {
+            setIsExporting(false);
+        }
+    }
 
     const { data: invoices = [], isLoading } = useListInvoicesQuery({
         search: search || undefined,
@@ -462,8 +487,26 @@ export default function AdminInvoicesPage() {
                     }}
                 />
                 <button
+                    onClick={handleExportZip}
+                    disabled={isExporting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border transition ml-auto"
+                    style={{
+                        borderColor: "var(--admin-border)",
+                        color: "var(--admin-muted-2)",
+                        background: "var(--admin-card)",
+                    }}
+                    title="Télécharger toutes les factures de la période en ZIP"
+                >
+                    {isExporting ? (
+                        <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                        <Archive size={14} />
+                    )}
+                    Exporter ZIP
+                </button>
+                <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-black ml-auto"
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-black"
                     style={{ background: "var(--admin-accent)" }}
                 >
                     <Plus size={14} />

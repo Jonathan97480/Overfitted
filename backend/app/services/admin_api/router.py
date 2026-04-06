@@ -1133,21 +1133,18 @@ async def create_invoice(body: InvoiceCreate, db: DBDep):
     return inv
 
 
-@router.get("/invoices/{invoice_id}/pdf", dependencies=[Depends(verify_admin_token)])
-async def download_invoice_pdf(invoice_id: int, db: DBDep):
+# ─── PDF helper (partagé entre download et export ZIP) ─────────────────────
+
+def _build_invoice_pdf_bytes(inv: "Invoice") -> bytes:
+    """Génère les bytes PDF d'une facture à partir de son objet ORM."""
     import json
     import io
-    from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_RIGHT, TA_CENTER
-
-    inv = await db.get(Invoice, invoice_id)
-    if not inv:
-        raise HTTPException(status_code=404, detail="Facture introuvable.")
+    from reportlab.lib.enums import TA_RIGHT
 
     items = json.loads(inv.items_json)
 
@@ -1159,18 +1156,14 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
 
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("title", parent=styles["Heading1"], fontSize=20, spaceAfter=4)
-    body_style = styles["Normal"]
-    right_style = ParagraphStyle("right", parent=styles["Normal"], alignment=TA_RIGHT)
     small_style = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, textColor=colors.grey)
 
     story = []
 
-    # En-tête
     story.append(Paragraph("OVERFITTED.IO", title_style))
     story.append(Paragraph("Design lab — produits uniques print-on-demand", small_style))
     story.append(Spacer(1, 0.3*cm))
 
-    # Adresses
     def _fmt_addr(raw):
         if not raw:
             return ""
@@ -1194,21 +1187,15 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
         addr_style = ParagraphStyle("addr", parent=styles["Normal"], fontSize=9, leading=14)
         addr_grey_style = ParagraphStyle("addr_grey", parent=styles["Normal"], fontSize=9, leading=14, textColor=colors.grey)
         billing_lines = "<br/>".join(billing_str.split("\n")) if billing_str else "&#8212;"
-        addr_left = Paragraph(
-            "<b>Adresse de facturation</b><br/>" + billing_lines,
-            addr_style
-        )
+        addr_left = Paragraph("<b>Adresse de facturation</b><br/>" + billing_lines, addr_style)
         if same_address:
             addr_right = Paragraph(
                 "<b>Adresse de livraison</b><br/><i>Identique a l'adresse de facturation</i>",
-                addr_grey_style
+                addr_grey_style,
             )
         else:
             shipping_lines = "<br/>".join(shipping_str.split("\n"))
-            addr_right = Paragraph(
-                "<b>Adresse de livraison</b><br/>" + shipping_lines,
-                addr_style
-            )
+            addr_right = Paragraph("<b>Adresse de livraison</b><br/>" + shipping_lines, addr_style)
         addr_table = Table([[addr_left, addr_right]], colWidths=[8*cm, 8*cm])
         addr_table.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -1217,11 +1204,10 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
         story.append(addr_table)
         story.append(Spacer(1, 0.4*cm))
 
-    # Infos facture
     issued = inv.issued_at.strftime("%d/%m/%Y") if inv.issued_at else ""
     info_data = [
         ["FACTURE", inv.invoice_number],
-        ["Date d’émission", issued],
+        ["Date d'émission", issued],
         ["Commande n°", str(inv.order_id)],
         ["Client", inv.user_name],
         ["Email", inv.user_email],
@@ -1240,7 +1226,6 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
     story.append(info_table)
     story.append(Spacer(1, 0.5*cm))
 
-    # Tableau articles
     header = ["Description", "Qté", "P.U. HT", "Total HT"]
     rows = [header]
     for item in items:
@@ -1267,9 +1252,8 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
     story.append(items_table)
     story.append(Spacer(1, 0.3*cm))
 
-    # Totaux
     totals_data = []
-    if inv.discount_amount > 0:
+    if inv.discount_amount and inv.discount_amount > 0:
         totals_data.append(["Remise", f"-{inv.discount_amount:.2f} €"])
     totals_data += [
         ["Sous-total HT", f"{inv.amount_ht:.2f} €"],
@@ -1288,18 +1272,74 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
     ]))
     story.append(totals_table)
     story.append(Spacer(1, 1*cm))
-
-    # Mentions légales
     story.append(Paragraph(
         "Paiement effectué en ligne via Stripe. "
-        "Conformément à la Directive 2011/83/UE, vous disposez d’un délai de rétractation de 14 jours "
+        "Conformément à la Directive 2011/83/UE, vous disposez d'un délai de rétractation de 14 jours "
         "à compter de la réception de votre commande.",
-        small_style
+        small_style,
     ))
 
     doc.build(story)
     buf.seek(0)
+    return buf.read()
 
+
+@router.get("/invoices/export", dependencies=[Depends(verify_admin_token)])
+async def export_invoices_zip(
+    db: DBDep,
+    search: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+):
+    """Exporte toutes les factures (filtrées) en archive ZIP de PDFs."""
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    stmt = select(Invoice).order_by(Invoice.issued_at.desc())
+    if search:
+        from sqlalchemy import or_
+        stmt = stmt.where(
+            or_(
+                Invoice.invoice_number.ilike(f"%{search}%"),
+                Invoice.user_email.ilike(f"%{search}%"),
+                Invoice.user_name.ilike(f"%{search}%"),
+            )
+        )
+    if date_from:
+        stmt = stmt.where(Invoice.issued_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Invoice.issued_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+
+    invoices = (await db.execute(stmt)).scalars().all()
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for inv in invoices:
+            pdf_bytes = _build_invoice_pdf_bytes(inv)
+            zf.writestr(f"{inv.invoice_number}.pdf", pdf_bytes)
+    zip_buf.seek(0)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    zip_name = f"factures-{today}.zip"
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
+
+
+@router.get("/invoices/{invoice_id}/pdf", dependencies=[Depends(verify_admin_token)])
+async def download_invoice_pdf(invoice_id: int, db: DBDep):
+    from fastapi.responses import StreamingResponse
+    import io
+
+    inv = await db.get(Invoice, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable.")
+
+    pdf_bytes = _build_invoice_pdf_bytes(inv)
+    buf = io.BytesIO(pdf_bytes)
     filename = f"{inv.invoice_number}.pdf"
     return StreamingResponse(
         buf,
