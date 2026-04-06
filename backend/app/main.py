@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from sqladmin import Admin
-from sqladmin.authentication import AuthenticationBackend
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from typing import AsyncGenerator
@@ -34,6 +34,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Session (requis pour SQLAdmin auth) ---
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "overfitted-dev-secret"),
+    max_age=8 * 3600,
+    https_only=False,  # passer à True en prod derrière HTTPS
+    same_site="lax",
+)
+
 
 # --- DB Dependency ---
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -52,19 +61,10 @@ async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# --- SQLAdmin Setup ---
-class SimpleAuth(AuthenticationBackend):
-    async def login(self, request):
-        return True  # TODO: Replace with real auth before prod
-    async def logout(self, request):
-        pass
-    async def authenticate(self, request):
-        return True
-
-
 # Import et enregistrement des vues admin
 from app.admin import UserAdmin, DesignAdmin, OrderAdmin, ProductAdmin
-admin = Admin(app, engine, authentication_backend=SimpleAuth(secret_key=os.getenv("SECRET_KEY", "overfitted-dev-secret")))
+from app.auth import AdminAuth
+admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=os.getenv("SECRET_KEY", "overfitted-dev-secret")))
 admin.add_view(UserAdmin)
 admin.add_view(DesignAdmin)
 admin.add_view(OrderAdmin)

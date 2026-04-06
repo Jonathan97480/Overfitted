@@ -26,7 +26,7 @@
 - [x] **Première migration Alembic** — table `users` créée (`alembic/versions/`)
 - [x] **`get_db()` dependency** — injecté via `Depends(get_db)` dans les endpoints
 - [x] **GitHub Actions CI** — `.github/workflows/ci.yml` : pytest sur push `main`
-- [ ] **Remplacer `SimpleAuth`** — implémenter une vraie auth admin (JWT ou session)
+- [x] **Remplacer `SimpleAuth`** — `AdminAuth` avec HMAC-SHA256 + `SessionMiddleware`, credentials depuis `.env` (`ADMIN_USERNAME`, `ADMIN_PASSWORD`), session expirante 8h
 
 ---
 
