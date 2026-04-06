@@ -292,6 +292,7 @@ async def test_webhook_endpoint_valid_returns_received():
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
 
 from app.database import Base, get_db
 from app.models import Invoice, Order, OrderStatus, PromoCode, Design
@@ -507,5 +508,187 @@ async def test_invoice_pdf_returns_pdf():
     assert r.headers["content-type"] == "application/pdf"
     assert "attachment" in r.headers.get("content-disposition", "")
     assert len(r.content) > 500   # un PDF non vide
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Webhook checkout.session.completed → création automatique de la facture
+# ---------------------------------------------------------------------------
+
+def _stripe_event(stripe_sid: str, amount_total_cents: int = 3600) -> dict:
+    """Construit un faux événement Stripe checkout.session.completed."""
+    return {
+        "type": "checkout.session.completed",
+        "id": "evt_test",
+        "data": {
+            "object": {
+                "id": stripe_sid,
+                "customer_email": "chaos@overfitted.io",
+                "customer_details": {
+                    "name": "Jean Chaos",
+                    "email": "chaos@overfitted.io",
+                    "address": {"city": "Paris", "country": "FR"},
+                },
+                "amount_total": amount_total_cents,
+            }
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_webhook_creates_invoice_for_existing_order():
+    """checkout.session.completed → Invoice créée, Order passé en paid."""
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with TestSession() as s:
+        design = Design(original_url="http://x.io/img.png", status="pending")
+        s.add(design)
+        await s.flush()
+        order = Order(design_id=design.id, stripe_session_id="cs_test_create_001")
+        s.add(order)
+        await s.commit()
+        order_id = order.id
+
+    fake_event = _stripe_event("cs_test_create_001", amount_total_cents=3600)
+    with patch("app.services.commerce.client.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
+         patch("app.services.commerce.client._stripe.Webhook.construct_event", return_value=fake_event):
+        async with await _client_with_db(engine) as ac:
+            r = await ac.post(
+                "/commerce/webhook",
+                content=b"payload",
+                headers={"stripe-signature": "t=1,v1=ok"},
+            )
+
+    assert r.status_code == 200
+    assert r.json()["received"] is True
+
+    async with TestSession() as s:
+        inv = (await s.execute(select(Invoice).where(Invoice.order_id == order_id))).scalar_one_or_none()
+        assert inv is not None
+        assert inv.invoice_number.startswith("OVF-")
+        assert inv.amount_ttc == 36.0
+        assert inv.tva_rate == 0.20
+        assert inv.user_email == "chaos@overfitted.io"
+        updated_order = (await s.execute(select(Order).where(Order.id == order_id))).scalar_one()
+        assert updated_order.status == OrderStatus.paid
+
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webhook_invoice_idempotent():
+    """Webhook envoyé deux fois → une seule facture créée (idempotence)."""
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with TestSession() as s:
+        design = Design(original_url="http://x.io/img.png", status="pending")
+        s.add(design)
+        await s.flush()
+        order = Order(design_id=design.id, stripe_session_id="cs_test_idem_001")
+        s.add(order)
+        await s.commit()
+        order_id = order.id
+
+    fake_event = _stripe_event("cs_test_idem_001")
+    with patch("app.services.commerce.client.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
+         patch("app.services.commerce.client._stripe.Webhook.construct_event", return_value=fake_event):
+        async with await _client_with_db(engine) as ac:
+            await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+            await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+
+    async with TestSession() as s:
+        count = (await s.execute(select(Invoice).where(Invoice.order_id == order_id))).scalars().all()
+        assert len(count) == 1
+
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webhook_invoice_sequential_numbers():
+    """Deux commandes → numéros de facture séquentiels OVF-YYYY-0001 et OVF-YYYY-0002."""
+    from datetime import datetime
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    year = datetime.now().year
+
+    async with TestSession() as s:
+        design = Design(original_url="http://x.io/img.png", status="pending")
+        s.add(design)
+        await s.flush()
+        order1 = Order(design_id=design.id, stripe_session_id="cs_test_seq_001")
+        order2 = Order(design_id=design.id, stripe_session_id="cs_test_seq_002")
+        s.add_all([order1, order2])
+        await s.commit()
+        id1, id2 = order1.id, order2.id
+
+    with patch("app.services.commerce.client.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
+         patch("app.services.commerce.client._stripe.Webhook.construct_event") as mock_event:
+        async with await _client_with_db(engine) as ac:
+            mock_event.return_value = _stripe_event("cs_test_seq_001")
+            await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+            mock_event.return_value = _stripe_event("cs_test_seq_002")
+            await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+
+    async with TestSession() as s:
+        inv1 = (await s.execute(select(Invoice).where(Invoice.order_id == id1))).scalar_one()
+        inv2 = (await s.execute(select(Invoice).where(Invoice.order_id == id2))).scalar_one()
+        assert inv1.invoice_number == f"OVF-{year}-0001"
+        assert inv2.invoice_number == f"OVF-{year}-0002"
+
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webhook_unknown_session_skips_invoice():
+    """checkout.session.completed avec stripe_session_id inconnu → 200, aucune facture."""
+    engine = await _make_db()
+
+    fake_event = _stripe_event("cs_test_unknown_999")
+    with patch("app.services.commerce.client.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
+         patch("app.services.commerce.client._stripe.Webhook.construct_event", return_value=fake_event):
+        async with await _client_with_db(engine) as ac:
+            r = await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+
+    assert r.status_code == 200
+    async with AsyncSession(engine) as s:
+        count = (await s.execute(select(Invoice))).scalars().all()
+        assert len(count) == 0
+
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webhook_marks_order_paid():
+    """checkout.session.completed → order.status passe bien à 'paid'."""
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with TestSession() as s:
+        design = Design(original_url="http://x.io/img.png", status="pending")
+        s.add(design)
+        await s.flush()
+        order = Order(design_id=design.id, stripe_session_id="cs_test_paid_001", status=OrderStatus.pending)
+        s.add(order)
+        await s.commit()
+        order_id = order.id
+
+    fake_event = _stripe_event("cs_test_paid_001")
+    with patch("app.services.commerce.client.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
+         patch("app.services.commerce.client._stripe.Webhook.construct_event", return_value=fake_event):
+        async with await _client_with_db(engine) as ac:
+            r = await ac.post("/commerce/webhook", content=b"p", headers={"stripe-signature": "t=1,v1=ok"})
+
+    assert r.status_code == 200
+    async with TestSession() as s:
+        order = (await s.execute(select(Order).where(Order.id == order_id))).scalar_one()
+        assert order.status == OrderStatus.paid
+
     app.dependency_overrides.pop(get_db, None)
     await engine.dispose()

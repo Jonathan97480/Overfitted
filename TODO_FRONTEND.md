@@ -294,10 +294,10 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 > Numérotation séquentielle `OVF-2026-XXXX` — jamais de trous, jamais de réutilisation.
 
 #### Prérequis backend
-- [ ] **Modèle `Invoice`** — `id`, `order_id` (FK unique), `invoice_number` (`OVF-YYYY-XXXX`), `issued_at`, `user_email`, `user_name`, `items_json`, `amount_ht`, `tva_rate` (0.20), `amount_tva`, `amount_ttc`, `promo_code`, `discount_amount`
-- [ ] **Génération automatique** à la réception du webhook Stripe `checkout.session.completed`
-- [ ] **`GET /commerce/invoice/{order_id}`** — retourne le PDF (lib `weasyprint`)
-- [ ] **Mentions légales PDF obligatoires** :
+- [x] **Modèle `Invoice`** — `id`, `order_id` (FK unique), `invoice_number` (`OVF-YYYY-XXXX`), `issued_at`, `user_email`, `user_name`, `items_json`, `amount_ht`, `tva_rate` (0.20), `amount_tva`, `amount_ttc`, `promo_code`, `discount_amount`
+- [x] **Génération automatique** à la réception du webhook Stripe `checkout.session.completed`
+- [x] **`GET /commerce/invoice/{order_id}`** — retourne le PDF (lib `weasyprint`)
+- [x] **Mentions légales PDF obligatoires** :
   - Raison sociale, SIRET, adresse, n° TVA intracommunautaire du vendeur
   - Numéro de facture séquentiel unique
   - Date d'émission
@@ -305,7 +305,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
   - Description produit, qté, prix unitaire HT, taux TVA (20%), montant TVA, total TTC
   - Code promo + montant remise si applicable
   - Conditions de paiement + délai de rétractation 14 jours (Directive 2011/83/UE)
-- [ ] **Migration Alembic** `add_invoice`
+- [x] **Migration Alembic** `add_invoice`
 
 #### Composants frontend
 - [x] **Page `/admin/invoices`** — toolbar : date-range picker + search (email ou n° facture)

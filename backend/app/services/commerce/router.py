@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Request, HTTPException, Header, Depends, Query
 from pydantic import BaseModel
 from typing import Optional
+import json as _json
 import os
+from datetime import datetime as _dt
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,21 @@ from app.services.commerce.client import (
 )
 
 router = APIRouter(prefix="/commerce", tags=["commerce"])
+
+
+async def _next_invoice_number(db: AsyncSession) -> str:
+    """Génère le prochain numéro de facture séquentiel OVF-YYYY-XXXX."""
+    year = _dt.now().year
+    prefix = f"OVF-{year}-"
+    result = await db.execute(
+        select(Invoice.invoice_number)
+        .where(Invoice.invoice_number.like(f"{prefix}%"))
+        .order_by(Invoice.invoice_number.desc())
+        .limit(1)
+    )
+    last = result.scalar()
+    seq = int(last.split("-")[-1]) + 1 if last else 1
+    return f"{prefix}{seq:04d}"
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -60,7 +77,11 @@ async def checkout(body: CheckoutRequest) -> dict:
 
 
 @router.post("/webhook")
-async def webhook(request: Request, stripe_signature: str = Header(None, alias="stripe-signature")) -> dict:
+async def webhook(
+    request: Request,
+    db: DBDep,
+    stripe_signature: str = Header(None, alias="stripe-signature"),
+) -> dict:
     """Reçoit les événements Stripe (payment_intent.succeeded, etc.).
 
     Vérifie la signature HMAC via STRIPE_WEBHOOK_SECRET.
@@ -77,8 +98,45 @@ async def webhook(request: Request, stripe_signature: str = Header(None, alias="
     # Traitement des événements métier
     event_type = event.get("type", "")
     if event_type == "checkout.session.completed":
-        # TODO : créer l'Order en DB + déclencher soumission Printful
-        pass
+        sess = event.get("data", {}).get("object", {})
+        stripe_sid = sess.get("id", "")
+        if stripe_sid:
+            order = (await db.execute(
+                select(Order).where(Order.stripe_session_id == stripe_sid)
+            )).scalar_one_or_none()
+            if order:
+                if order.status != OrderStatus.paid:
+                    order.status = OrderStatus.paid
+                    await db.flush()
+                existing_inv = (await db.execute(
+                    select(Invoice).where(Invoice.order_id == order.id)
+                )).scalar_one_or_none()
+                if not existing_inv:
+                    amount_total = (sess.get("amount_total") or 0) / 100
+                    tva_rate = 0.20
+                    amount_ttc = round(amount_total, 2)
+                    amount_ht = round(amount_ttc / (1 + tva_rate), 2)
+                    amount_tva = round(amount_ttc - amount_ht, 2)
+                    customer_details = sess.get("customer_details") or {}
+                    inv = Invoice(
+                        order_id=order.id,
+                        invoice_number=await _next_invoice_number(db),
+                        user_email=sess.get("customer_email") or customer_details.get("email", ""),
+                        user_name=customer_details.get("name", ""),
+                        billing_address=_json.dumps(customer_details.get("address") or {}),
+                        items_json=_json.dumps([{
+                            "description": "Commande Overfitted",
+                            "quantity": 1,
+                            "unit_price_ht": amount_ht,
+                        }]),
+                        amount_ht=amount_ht,
+                        tva_rate=tva_rate,
+                        amount_tva=amount_tva,
+                        amount_ttc=amount_ttc,
+                        discount_amount=0.0,
+                    )
+                    db.add(inv)
+                    await db.commit()
 
     return {"received": True, "type": event_type}
 
