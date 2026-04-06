@@ -2,25 +2,21 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqladmin import Admin
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
-from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
 import asyncio
 from dotenv import load_dotenv
+from app.database import engine, Base, get_db
 from app.services.fixer.image_utils import validate_and_open_image
 from app.services.fixer.router import router as fixer_router
 from app.services.roast_engine.router import router as roast_router
 from app.services.soul_o_meter.router import router as soul_router
 from app.services.commerce.router import router as commerce_router
+from app.services.admin_api.router import router as admin_router
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./db.sqlite3")
-
-engine = create_async_engine(DATABASE_URL, echo=True)
-SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-Base = declarative_base()
 
 
 app = FastAPI(title="Overfitted.io API", description="Backend satirique Print-on-Demand", version="0.1.0")
@@ -45,9 +41,7 @@ app.add_middleware(
 
 
 # --- DB Dependency ---
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with SessionLocal() as session:
-        yield session
+# get_db est défini dans app.database — importé ci-dessus
 
 
 # --- ENDPOINT FIXER ---
@@ -75,6 +69,7 @@ app.include_router(fixer_router)
 app.include_router(roast_router)
 app.include_router(soul_router)
 app.include_router(commerce_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enu
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
-from app.main import Base
+from app.database import Base
 
 
 class User(Base):
