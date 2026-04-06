@@ -89,7 +89,7 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
             ))}
             <div>
                 <label className="text-xs text-[var(--admin-muted-2)] mb-1 block">Catégorie</label>
-                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v ?? "" })}>
                     <SelectTrigger style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", color: "white" }}>
                         <SelectValue placeholder="Choisir…" />
                     </SelectTrigger>

@@ -19,6 +19,7 @@ export function proxy(request: NextRequest) {
     if (!token) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = LOGIN_PATH;
+        loginUrl.searchParams.set("next", pathname);
         return NextResponse.redirect(loginUrl);
     }
 
