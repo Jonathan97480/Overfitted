@@ -22,7 +22,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trash2 } from "lucide-react";
+import { Trash2, Eye } from "lucide-react";
+import Link from "next/link";
 
 const STATUS_VARIANT: Record<
     DesignOut["status"],
@@ -170,15 +171,23 @@ export default function AdminDesignsPage() {
                                     {new Date(design.created_at).toLocaleDateString("fr-FR")}
                                 </TableCell>
                                 <TableCell>
-                                    <button
-                                        onClick={() => {
-                                            if (confirm(`Supprimer le design #${design.id} ?`))
-                                                deleteDesign(design.id);
-                                        }}
-                                        className="text-[var(--admin-muted)] hover:text-red-400 transition-colors"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <Link
+                                            href={`/admin/designs/${design.id}`}
+                                            className="text-[var(--admin-muted)] hover:text-[var(--admin-accent)] transition-colors"
+                                        >
+                                            <Eye size={14} />
+                                        </Link>
+                                        <button
+                                            onClick={() => {
+                                                if (confirm(`Supprimer le design #${design.id} ?`))
+                                                    deleteDesign(design.id);
+                                            }}
+                                            className="text-[var(--admin-muted)] hover:text-red-400 transition-colors"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,6 +14,8 @@ import {
     LogOut,
     Store,
     Receipt,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 import { useAppDispatch } from "@/lib/hooks";
 import { clearToken } from "@/lib/adminAuthSlice";
@@ -35,6 +38,7 @@ export function AdminSidebar() {
     const pathname = usePathname();
     const router = useRouter();
     const dispatch = useAppDispatch();
+    const [collapsed, setCollapsed] = useState(false);
 
     function handleLogout() {
         dispatch(clearToken());
@@ -43,30 +47,49 @@ export function AdminSidebar() {
 
     return (
         <aside
-            style={{ background: "var(--admin-sidebar)", borderRight: "1px solid var(--admin-border)" }}
-            className="w-56 min-h-screen flex flex-col shrink-0"
+            style={{
+                background: "var(--admin-sidebar)",
+                borderRight: "1px solid var(--admin-border)",
+                width: collapsed ? 64 : 224,
+                transition: "width 200ms ease",
+            }}
+            className="min-h-screen flex flex-col shrink-0 overflow-hidden"
         >
-            {/* Logo */}
+            {/* Logo + collapse button */}
             <div
                 style={{ borderBottom: "1px solid var(--admin-border)" }}
-                className="px-5 py-4 flex items-center gap-2"
+                className="px-3 py-4 flex items-center gap-2 h-14"
             >
-                <span className="text-[var(--admin-accent)] font-mono font-bold text-lg tracking-tight">
-                    OVER
-                </span>
-                <span className="text-white font-mono font-bold text-lg tracking-tight">
-                    FITTED
-                </span>
-                <span
-                    style={{ background: "var(--admin-accent)" }}
-                    className="ml-auto text-[10px] font-mono text-black px-1.5 py-0.5 rounded"
+                {!collapsed && (
+                    <>
+                        <span className="text-[var(--admin-accent)] font-mono font-bold text-lg tracking-tight">
+                            OVER
+                        </span>
+                        <span className="text-white font-mono font-bold text-lg tracking-tight">
+                            FITTED
+                        </span>
+                        <span
+                            style={{ background: "var(--admin-accent)" }}
+                            className="ml-auto text-[10px] font-mono text-black px-1.5 py-0.5 rounded"
+                        >
+                            ADMIN
+                        </span>
+                    </>
+                )}
+                <button
+                    onClick={() => setCollapsed((c) => !c)}
+                    className={cn(
+                        "text-[var(--admin-muted-2)] hover:text-white transition-colors rounded p-0.5 hover:bg-white/5",
+                        collapsed ? "mx-auto" : "ml-1"
+                    )}
+                    title={collapsed ? "Déplier la sidebar" : "Réduire la sidebar"}
                 >
-                    ADMIN
-                </span>
+                    {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                </button>
             </div>
 
             {/* Nav */}
-            <nav className="flex-1 px-3 py-4 space-y-0.5">
+            <nav className="flex-1 px-2 py-4 space-y-0.5">
                 {NAV.map(({ href, label, icon: Icon }) => {
                     const active =
                         href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
@@ -74,8 +97,10 @@ export function AdminSidebar() {
                         <Link
                             key={href}
                             href={href}
+                            title={collapsed ? label : undefined}
                             className={cn(
-                                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                                "flex items-center gap-3 px-2 py-2 rounded-md text-sm transition-colors",
+                                collapsed ? "justify-center" : "",
                                 active
                                     ? "text-white font-medium"
                                     : "text-[var(--admin-muted-2)] hover:text-white hover:bg-white/5"
@@ -86,8 +111,8 @@ export function AdminSidebar() {
                                     : undefined
                             }
                         >
-                            <Icon size={16} />
-                            {label}
+                            <Icon size={16} className="shrink-0" />
+                            {!collapsed && <span className="truncate">{label}</span>}
                         </Link>
                     );
                 })}
@@ -96,16 +121,22 @@ export function AdminSidebar() {
             {/* Logout */}
             <div
                 style={{ borderTop: "1px solid var(--admin-border)" }}
-                className="px-3 py-3"
+                className="px-2 py-3"
             >
                 <button
                     onClick={handleLogout}
-                    className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-[var(--admin-muted-2)] hover:text-red-400 hover:bg-white/5 transition-colors"
+                    title={collapsed ? "Déconnexion" : undefined}
+                    className={cn(
+                        "flex items-center gap-3 w-full px-2 py-2 rounded-md text-sm text-[var(--admin-muted-2)] hover:text-red-400 hover:bg-white/5 transition-colors",
+                        collapsed ? "justify-center" : ""
+                    )}
                 >
-                    <LogOut size={16} />
-                    Déconnexion
+                    <LogOut size={16} className="shrink-0" />
+                    {!collapsed && "Déconnexion"}
                 </button>
             </div>
         </aside>
     );
 }
+
+

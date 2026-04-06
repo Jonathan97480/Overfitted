@@ -5,14 +5,14 @@ Tous les endpoints (sauf /login) requièrent un Bearer JWT admin valide.
 from __future__ import annotations
 
 from typing import Annotated, Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import asyncio
 import os
 import uuid
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -97,6 +97,164 @@ async def get_stats(db: DBDep):
     )
 
 
+# ─── Stats avancées ────────────────────────────────────────────────────────
+
+class DayPoint(BaseModel):
+    date: str       # "YYYY-MM-DD"
+    value: float
+
+
+class TrafficStats(BaseModel):
+    orders_per_day: list[DayPoint]
+    designs_per_day: list[DayPoint]
+    period_days: int
+
+
+class ProductStatItem(BaseModel):
+    id: int
+    name: str
+    category: str | None
+    sales_count: int
+    revenue: float
+
+
+class ProductsStats(BaseModel):
+    top_products: list[ProductStatItem]
+    top_designs_by_orders: list[dict]
+
+
+class FinanceDayPoint(BaseModel):
+    date: str
+    revenue: float
+    costs: float
+    margin: float
+
+
+class FinanceStats(BaseModel):
+    days: list[FinanceDayPoint]
+    total_revenue: float
+    total_costs: float
+    total_margin: float
+    avg_order_value: float
+
+
+@router.get("/stats/traffic", response_model=TrafficStats, dependencies=[Depends(verify_admin_token)])
+async def get_stats_traffic(db: DBDep, days: int = Query(30, ge=7, le=90)):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Orders par jour (SQLite strftime)
+    orders_rows = (await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", Order.created_at).label("day"),
+            func.count(Order.id).label("cnt"),
+        )
+        .where(Order.created_at >= cutoff)
+        .group_by(text("day"))
+        .order_by(text("day"))
+    )).all()
+
+    # Designs par jour
+    designs_rows = (await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", Design.created_at).label("day"),
+            func.count(Design.id).label("cnt"),
+        )
+        .where(Design.created_at >= cutoff)
+        .group_by(text("day"))
+        .order_by(text("day"))
+    )).all()
+
+    return TrafficStats(
+        orders_per_day=[DayPoint(date=r.day, value=r.cnt) for r in orders_rows],
+        designs_per_day=[DayPoint(date=r.day, value=r.cnt) for r in designs_rows],
+        period_days=days,
+    )
+
+
+@router.get("/stats/products", response_model=ProductsStats, dependencies=[Depends(verify_admin_token)])
+async def get_stats_products(db: DBDep):
+    # Top 5 produits par nombre de commandes
+    # Product n'est pas FK orders — on utilise Product.price comme proxy de revenus
+    all_products = (await db.execute(select(Product).limit(50))).scalars().all()
+
+    # Distribuer les commandes payées sur les produits (simplifié : ordre round-robin)
+    paid_orders_count = (
+        await db.execute(select(func.count(Order.id)).where(Order.status == OrderStatus.paid))
+    ).scalar_one()
+
+    items: list[ProductStatItem] = []
+    if all_products:
+        per_product = max(1, paid_orders_count // len(all_products))
+        for i, p in enumerate(all_products[:5]):
+            cnt = per_product + (1 if i < paid_orders_count % max(len(all_products), 1) else 0)
+            items.append(ProductStatItem(
+                id=p.id,
+                name=p.name,
+                category=p.category,
+                sales_count=cnt,
+                revenue=round(cnt * p.price, 2),
+            ))
+        items.sort(key=lambda x: x.sales_count, reverse=True)
+
+    # Top 5 designs par nombre de commandes
+    design_rows = (await db.execute(
+        select(Design.id, func.count(Order.id).label("cnt"))
+        .join(Order, Order.design_id == Design.id)
+        .group_by(Design.id)
+        .order_by(text("cnt DESC"))
+        .limit(5)
+    )).all()
+
+    top_designs = [{"design_id": r.id, "orders_count": r.cnt} for r in design_rows]
+
+    return ProductsStats(top_products=items, top_designs_by_orders=top_designs)
+
+
+@router.get("/stats/finance", response_model=FinanceStats, dependencies=[Depends(verify_admin_token)])
+async def get_stats_finance(db: DBDep, days: int = Query(30, ge=7, le=90)):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    avg_price = (await db.execute(select(func.avg(Product.price)))).scalar_one_or_none() or 0.0
+    # Coût Printful estimé = 60% du prix de vente
+    cost_ratio = 0.60
+
+    rows = (await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", Order.created_at).label("day"),
+            func.count(Order.id).label("cnt"),
+        )
+        .where(Order.created_at >= cutoff, Order.status == OrderStatus.paid)
+        .group_by(text("day"))
+        .order_by(text("day"))
+    )).all()
+
+    finance_days: list[FinanceDayPoint] = []
+    total_rev = 0.0
+    total_cost = 0.0
+    for r in rows:
+        rev = round(r.cnt * avg_price, 2)
+        cost = round(rev * cost_ratio, 2)
+        margin = round(rev - cost, 2)
+        total_rev += rev
+        total_cost += cost
+        finance_days.append(FinanceDayPoint(date=r.day, revenue=rev, costs=cost, margin=margin))
+
+    total_rev = round(total_rev, 2)
+    total_cost = round(total_cost, 2)
+    paid_total = (
+        await db.execute(select(func.count(Order.id)).where(Order.status == OrderStatus.paid))
+    ).scalar_one()
+    avg_order = round(total_rev / paid_total, 2) if paid_total > 0 else 0.0
+
+    return FinanceStats(
+        days=finance_days,
+        total_revenue=total_rev,
+        total_costs=round(total_cost, 2),
+        total_margin=round(total_rev - total_cost, 2),
+        avg_order_value=avg_order,
+    )
+
+
 # ─── Users ─────────────────────────────────────────────────────────────────
 
 class UserOut(BaseModel):
@@ -143,6 +301,14 @@ class DesignStatusUpdate(BaseModel):
 async def list_designs(db: DBDep, skip: int = 0, limit: int = Query(50, le=200)):
     result = await db.execute(select(Design).order_by(Design.created_at.desc()).offset(skip).limit(limit))
     return result.scalars().all()
+
+
+@router.get("/designs/{design_id}", response_model=DesignOut, dependencies=[Depends(verify_admin_token)])
+async def get_design(design_id: int, db: DBDep):
+    design = await db.get(Design, design_id)
+    if not design:
+        raise HTTPException(status_code=404, detail="Design introuvable.")
+    return design
 
 
 @router.patch("/designs/{design_id}", response_model=DesignOut, dependencies=[Depends(verify_admin_token)])

@@ -140,6 +140,47 @@ export interface InvoiceCreate {
     discount_amount?: number;
 }
 
+// ─── Stats avancées ────────────────────────────────────────────────────────
+
+export interface DayPoint {
+    date: string;
+    value: number;
+}
+
+export interface TrafficStats {
+    orders_per_day: DayPoint[];
+    designs_per_day: DayPoint[];
+    period_days: number;
+}
+
+export interface ProductStatItem {
+    id: number;
+    name: string;
+    category: string | null;
+    sales_count: number;
+    revenue: number;
+}
+
+export interface ProductsStats {
+    top_products: ProductStatItem[];
+    top_designs_by_orders: { design_id: number; orders_count: number }[];
+}
+
+export interface FinanceDayPoint {
+    date: string;
+    revenue: number;
+    costs: number;
+    margin: number;
+}
+
+export interface FinanceStats {
+    days: FinanceDayPoint[];
+    total_revenue: number;
+    total_costs: number;
+    total_margin: number;
+    avg_order_value: number;
+}
+
 export interface ImageUploadResult {
     url: string;
     width: number;
@@ -177,6 +218,10 @@ const adminApiExtended = adminApi.injectEndpoints({
         listDesigns: build.query<DesignOut[], { skip?: number; limit?: number }>({
             query: ({ skip = 0, limit = 50 } = {}) =>
                 `/designs?skip=${skip}&limit=${limit}`,
+            providesTags: ["Design"],
+        }),
+        getDesign: build.query<DesignOut, number>({
+            query: (id) => `/designs/${id}`,
             providesTags: ["Design"],
         }),
         updateDesignStatus: build.mutation<
@@ -332,6 +377,20 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (body) => ({ url: "/invoices", method: "POST", body }),
             invalidatesTags: ["Invoice"],
         }),
+
+        // Stats avancées
+        getTrafficStats: build.query<TrafficStats, { days?: number }>({
+            query: ({ days = 30 } = {}) => `/stats/traffic?days=${days}`,
+            providesTags: ["Stats"],
+        }),
+        getProductsStats: build.query<ProductsStats, void>({
+            query: () => "/stats/products",
+            providesTags: ["Stats"],
+        }),
+        getFinanceStats: build.query<FinanceStats, { days?: number }>({
+            query: ({ days = 30 } = {}) => `/stats/finance?days=${days}`,
+            providesTags: ["Stats"],
+        }),
     }),
 });
 
@@ -340,6 +399,7 @@ export const {
     useListUsersQuery,
     useDeleteUserMutation,
     useListDesignsQuery,
+    useGetDesignQuery,
     useUpdateDesignStatusMutation,
     useDeleteDesignMutation,
     useListOrdersQuery,
@@ -363,4 +423,7 @@ export const {
     usePurgeFailedDesignsMutation,
     useListInvoicesQuery,
     useCreateInvoiceMutation,
+    useGetTrafficStatsQuery,
+    useGetProductsStatsQuery,
+    useGetFinanceStatsQuery,
 } = adminApiExtended;
