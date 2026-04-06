@@ -328,18 +328,18 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 #### Composants frontend
 - [x] **`SettingsPage`** — layout en sections accordéon (Shadcn Accordion)
-- [ ] **Section IA / LLM**
+- [x] **Section IA / LLM**
   - Champ `LLM_BASE_URL` (ex: `http://localhost:1234` pour LM Studio)
   - Champ `LLM_MODEL` (ex: `gemma-4-e4b-it`)
   - Bouton **Tester la connexion** → `GET /api/admin/settings/test/llm` → badge Connecté ✓ / Erreur ✗
-- [ ] **Section Printful**
+- [x] **Section Printful**
   - Champ `PRINTFUL_API_KEY` (masqué, reveal au clic)
   - Bouton **Tester** → `GET /api/admin/settings/test/printful` → badge statut
-- [ ] **Section Stripe**
+- [x] **Section Stripe**
   - Champ `STRIPE_SECRET_KEY` (masqué)
   - Champ `STRIPE_WEBHOOK_SECRET` (masqué)
   - Bouton **Tester** → `GET /api/admin/settings/test/stripe` → badge statut
-- [ ] **Section OpenAI** (optionnel, cloud fallback)
+- [x] **Section OpenAI** (optionnel, cloud fallback)
   - Champ `OPENAI_API_KEY` (masqué)
   - Bouton **Tester**
 - [x] **`ApiKeyField`** — composant réutilisable : input type `password` + bouton œil toggle reveal + bouton copier + badge statut connexion

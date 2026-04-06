@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Toaster } from "sonner";
 import { AdminSidebar } from "@/components/admin/Sidebar";
 import { AdminTopbar } from "@/components/admin/Topbar";
 
@@ -15,6 +16,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <AdminTopbar />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <Toaster position="bottom-right" theme="dark" richColors />
     </div>
   );
 }

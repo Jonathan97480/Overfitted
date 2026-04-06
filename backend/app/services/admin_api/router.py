@@ -921,8 +921,25 @@ def _encrypt(value: str) -> str:
 def _decrypt(token: str) -> str:
     return _get_fernet().decrypt(token.encode()).decode()
 
+
+async def _get_setting_value(key: str, db: AsyncSession) -> str | None:
+    """Lit la valeur depuis la DB (déchiffrée) puis fallback os.environ."""
+    row = (
+        await db.execute(select(Setting).where(Setting.key == key))
+    ).scalar_one_or_none()
+    if row:
+        try:
+            return _decrypt(row.value)
+        except Exception:
+            pass
+    return os.environ.get(key)
+
+
 _SETTINGS_KEYS = [
+    ("LLM_BASE_URL", "LLM Base URL"),
+    ("LLM_MODEL", "LLM Model"),
     ("STRIPE_SECRET_KEY", "Stripe Secret Key"),
+    ("STRIPE_WEBHOOK_SECRET", "Stripe Webhook Secret"),
     ("PRINTFUL_API_KEY", "Printful API Key"),
     ("OPENAI_API_KEY", "OpenAI API Key"),
     ("ADMIN_PASSWORD", "Admin Password"),
@@ -999,14 +1016,14 @@ async def patch_settings(body: SettingsPatch, db: DBDep):
 
 
 @router.post("/settings/test/{service}", response_model=ServiceTestResult, dependencies=[Depends(verify_admin_token)])
-async def test_service(service: str):
+async def test_service(service: str, db: DBDep):
     import httpx  # noqa: PLC0415
     service = service.lower()
 
     async with httpx.AsyncClient(timeout=8.0) as client:
         try:
             if service == "stripe":
-                key = os.environ.get("STRIPE_SECRET_KEY", "")
+                key = (await _get_setting_value("STRIPE_SECRET_KEY", db)) or ""
                 if not key:
                     return ServiceTestResult(service="stripe", ok=False, message="STRIPE_SECRET_KEY non définie.")
                 resp = await client.get(
@@ -1017,7 +1034,7 @@ async def test_service(service: str):
                 msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
 
             elif service == "openai":
-                key = os.environ.get("OPENAI_API_KEY", "")
+                key = (await _get_setting_value("OPENAI_API_KEY", db)) or ""
                 if not key:
                     return ServiceTestResult(service="openai", ok=False, message="OPENAI_API_KEY non définie.")
                 resp = await client.get(
@@ -1028,13 +1045,21 @@ async def test_service(service: str):
                 msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
 
             elif service == "printful":
-                key = os.environ.get("PRINTFUL_API_KEY", "")
+                key = (await _get_setting_value("PRINTFUL_API_KEY", db)) or ""
                 if not key:
                     return ServiceTestResult(service="printful", ok=False, message="PRINTFUL_API_KEY non définie.")
                 resp = await client.get(
                     "https://api.printful.com/store",
                     headers={"Authorization": f"Bearer {key}"},
                 )
+                ok = resp.status_code == 200
+                msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
+
+            elif service == "llm":
+                base_url = ((await _get_setting_value("LLM_BASE_URL", db)) or "").rstrip("/")
+                if not base_url:
+                    return ServiceTestResult(service="llm", ok=False, message="LLM_BASE_URL non définie.")
+                resp = await client.get(f"{base_url}/v1/models")
                 ok = resp.status_code == 200
                 msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
 
