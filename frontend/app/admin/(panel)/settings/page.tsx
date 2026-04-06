@@ -89,9 +89,8 @@ export default function AdminSettingsPage() {
                                 <div className="flex items-center gap-2">
                                     {result && (
                                         <span
-                                            className={`flex items-center gap-1 text-xs font-semibold ${
-                                                result.ok ? "text-green-400" : "text-red-400"
-                                            }`}
+                                            className={`flex items-center gap-1 text-xs font-semibold ${result.ok ? "text-green-400" : "text-red-400"
+                                                }`}
                                         >
                                             {result.ok ? (
                                                 <CheckCircle size={12} />

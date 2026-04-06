@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Order, OrderStatus, Product, PromoCode, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, PromoCode, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 
 _UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "static", "catalogue")
@@ -704,4 +704,244 @@ async def purge_failed_designs(db: DBDep):
         await db.delete(d)
     await db.commit()
     return {"deleted": count}
+
+
+# ─── Invoices ──────────────────────────────────────────────────────────────────────────
+
+class InvoiceItemSchema(BaseModel):
+    description: str
+    quantity: int
+    unit_price_ht: float
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    order_id: int
+    invoice_number: str
+    issued_at: datetime
+    user_email: str
+    user_name: str
+    items_json: str
+    amount_ht: float
+    tva_rate: float
+    amount_tva: float
+    amount_ttc: float
+    promo_code: str | None
+    discount_amount: float
+    model_config = {"from_attributes": True}
+
+
+class InvoiceCreate(BaseModel):
+    order_id: int
+    user_email: str
+    user_name: str
+    items: list[InvoiceItemSchema]
+    tva_rate: float = 0.20
+    promo_code: str | None = None
+    discount_amount: float = 0.0
+
+
+def _next_invoice_number(year: int, seq: int) -> str:
+    return f"OVF-{year}-{seq:04d}"
+
+
+@router.get("/invoices", response_model=list[InvoiceOut], dependencies=[Depends(verify_admin_token)])
+async def list_invoices(
+    db: DBDep,
+    skip: int = 0,
+    limit: int = Query(100, le=500),
+    search: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+):
+    from sqlalchemy import or_, cast, String as SAString
+    stmt = select(Invoice).order_by(Invoice.issued_at.desc())
+    if search:
+        stmt = stmt.where(
+            or_(
+                Invoice.invoice_number.ilike(f"%{search}%"),
+                Invoice.user_email.ilike(f"%{search}%"),
+                Invoice.user_name.ilike(f"%{search}%"),
+            )
+        )
+    if date_from:
+        from datetime import date
+        stmt = stmt.where(Invoice.issued_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        stmt = stmt.where(Invoice.issued_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+    result = await db.execute(stmt.offset(skip).limit(limit))
+    return result.scalars().all()
+
+
+@router.post("/invoices", response_model=InvoiceOut, dependencies=[Depends(verify_admin_token)])
+async def create_invoice(body: InvoiceCreate, db: DBDep):
+    import json
+    from datetime import date
+    # Vérifier doublon
+    existing = (await db.execute(
+        select(Invoice).where(Invoice.order_id == body.order_id)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Une facture existe déjà pour cette commande.")
+
+    # Numéro séquentiel
+    year = datetime.now().year
+    count = (await db.execute(
+        select(func.count(Invoice.id)).where(
+            Invoice.invoice_number.like(f"OVF-{year}-%")
+        )
+    )).scalar_one()
+    invoice_number = _next_invoice_number(year, count + 1)
+
+    # Calculs montants
+    amount_ht = sum(item.quantity * item.unit_price_ht for item in body.items)
+    amount_ht = round(amount_ht - body.discount_amount, 2)
+    amount_tva = round(amount_ht * body.tva_rate, 2)
+    amount_ttc = round(amount_ht + amount_tva, 2)
+
+    inv = Invoice(
+        order_id=body.order_id,
+        invoice_number=invoice_number,
+        user_email=body.user_email,
+        user_name=body.user_name,
+        items_json=json.dumps([i.model_dump() for i in body.items], ensure_ascii=False),
+        amount_ht=amount_ht,
+        tva_rate=body.tva_rate,
+        amount_tva=amount_tva,
+        amount_ttc=amount_ttc,
+        promo_code=body.promo_code,
+        discount_amount=body.discount_amount,
+    )
+    db.add(inv)
+    await db.commit()
+    await db.refresh(inv)
+    return inv
+
+
+@router.get("/invoices/{invoice_id}/pdf", dependencies=[Depends(verify_admin_token)])
+async def download_invoice_pdf(invoice_id: int, db: DBDep):
+    import json
+    import io
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+
+    inv = await db.get(Invoice, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable.")
+
+    items = json.loads(inv.items_json)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("title", parent=styles["Heading1"], fontSize=20, spaceAfter=4)
+    body_style = styles["Normal"]
+    right_style = ParagraphStyle("right", parent=styles["Normal"], alignment=TA_RIGHT)
+    small_style = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, textColor=colors.grey)
+
+    story = []
+
+    # En-tête
+    story.append(Paragraph("OVERFITTED.IO", title_style))
+    story.append(Paragraph("Design lab — produits uniques print-on-demand", small_style))
+    story.append(Spacer(1, 0.3*cm))
+
+    # Infos facture
+    issued = inv.issued_at.strftime("%d/%m/%Y") if inv.issued_at else ""
+    info_data = [
+        ["FACTURE", inv.invoice_number],
+        ["Date d’émission", issued],
+        ["Commande n°", str(inv.order_id)],
+        ["Client", inv.user_name],
+        ["Email", inv.user_email],
+    ]
+    if inv.promo_code:
+        info_data.append(["Code promo", inv.promo_code])
+
+    info_table = Table(info_data, colWidths=[5*cm, 10*cm])
+    info_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#555555")),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Tableau articles
+    header = ["Description", "Qté", "P.U. HT", "Total HT"]
+    rows = [header]
+    for item in items:
+        total = item["quantity"] * item["unit_price_ht"]
+        rows.append([
+            item["description"],
+            str(item["quantity"]),
+            f"{item['unit_price_ht']:.2f} €",
+            f"{total:.2f} €",
+        ])
+
+    items_table = Table(rows, colWidths=[9*cm, 2*cm, 3*cm, 3*cm])
+    items_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#DDDDDD")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9F9F9")]),
+    ]))
+    story.append(items_table)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Totaux
+    totals_data = []
+    if inv.discount_amount > 0:
+        totals_data.append(["Remise", f"-{inv.discount_amount:.2f} €"])
+    totals_data += [
+        ["Sous-total HT", f"{inv.amount_ht:.2f} €"],
+        [f"TVA ({int(inv.tva_rate*100)}%)", f"{inv.amount_tva:.2f} €"],
+        ["TOTAL TTC", f"{inv.amount_ttc:.2f} €"],
+    ]
+    totals_table = Table(totals_data, colWidths=[14*cm, 3*cm])
+    totals_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, -1), (-1, -1), 11),
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, colors.black),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(totals_table)
+    story.append(Spacer(1, 1*cm))
+
+    # Mentions légales
+    story.append(Paragraph(
+        "Paiement effectué en ligne via Stripe. "
+        "Conformément à la Directive 2011/83/UE, vous disposez d’un délai de rétractation de 14 jours "
+        "à compter de la réception de votre commande.",
+        small_style
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+
+    filename = f"{inv.invoice_number}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 

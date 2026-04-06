@@ -12,6 +12,7 @@ import {
     Settings,
     LogOut,
     Store,
+    Receipt,
 } from "lucide-react";
 import { useAppDispatch } from "@/lib/hooks";
 import { clearToken } from "@/lib/adminAuthSlice";
@@ -25,6 +26,7 @@ const NAV = [
     { href: "/admin/products", label: "Produits Printful", icon: Package },
     { href: "/admin/users", label: "Utilisateurs", icon: Users },
     { href: "/admin/promo", label: "Codes promo", icon: Tag },
+    { href: "/admin/invoices", label: "Factures", icon: Receipt },
     { href: "/admin/stats", label: "Statistiques", icon: BarChart2 },
     { href: "/admin/settings", label: "Paramètres", icon: Settings },
 ];

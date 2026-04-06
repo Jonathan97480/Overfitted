@@ -104,3 +104,23 @@ class PromoCode(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), unique=True, nullable=False, index=True)
+    invoice_number = Column(String, unique=True, nullable=False, index=True)  # OVF-YYYY-XXXX
+    issued_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    user_email = Column(String, nullable=False)
+    user_name = Column(String, nullable=False)
+    items_json = Column(String, nullable=False)  # JSON array sérialisé
+    amount_ht = Column(Float, nullable=False)
+    tva_rate = Column(Float, default=0.20, nullable=False)
+    amount_tva = Column(Float, nullable=False)
+    amount_ttc = Column(Float, nullable=False)
+    promo_code = Column(String, nullable=True)
+    discount_amount = Column(Float, default=0.0, nullable=False)
+
+    order = relationship("Order", foreign_keys=[order_id])
+

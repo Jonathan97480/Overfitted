@@ -96,6 +96,38 @@ export interface ServiceTestResult {
     message: string;
 }
 
+export interface InvoiceItemSchema {
+    description: string;
+    quantity: number;
+    unit_price_ht: number;
+}
+
+export interface InvoiceOut {
+    id: number;
+    order_id: number;
+    invoice_number: string;
+    issued_at: string;
+    user_email: string;
+    user_name: string;
+    items_json: string;
+    amount_ht: number;
+    tva_rate: number;
+    amount_tva: number;
+    amount_ttc: number;
+    promo_code: string | null;
+    discount_amount: number;
+}
+
+export interface InvoiceCreate {
+    order_id: number;
+    user_email: string;
+    user_name: string;
+    items: InvoiceItemSchema[];
+    tva_rate?: number;
+    promo_code?: string | null;
+    discount_amount?: number;
+}
+
 export interface ImageUploadResult {
     url: string;
     width: number;
@@ -269,6 +301,25 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: () => ({ url: "/settings/purge-failed-designs", method: "POST" }),
             invalidatesTags: ["Design", "Stats"],
         }),
+
+        // Invoices
+        listInvoices: build.query<
+            InvoiceOut[],
+            { skip?: number; limit?: number; search?: string; date_from?: string; date_to?: string }
+        >({
+            query: ({ skip = 0, limit = 100, search, date_from, date_to } = {}) => {
+                const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+                if (search) params.set("search", search);
+                if (date_from) params.set("date_from", date_from);
+                if (date_to) params.set("date_to", date_to);
+                return `/invoices?${params.toString()}`;
+            },
+            providesTags: ["Invoice"],
+        }),
+        createInvoice: build.mutation<InvoiceOut, InvoiceCreate>({
+            query: (body) => ({ url: "/invoices", method: "POST", body }),
+            invalidatesTags: ["Invoice"],
+        }),
     }),
 });
 
@@ -298,4 +349,6 @@ export const {
     useGetSettingsQuery,
     useTestServiceMutation,
     usePurgeFailedDesignsMutation,
+    useListInvoicesQuery,
+    useCreateInvoiceMutation,
 } = adminApiExtended;
