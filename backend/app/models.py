@@ -91,3 +91,16 @@ class CatalogueItem(Base):
     tags = Column(String, nullable=True)  # JSON array sérialisé en String
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    discount_percent = Column(Integer, nullable=False)
+    max_uses = Column(Integer, nullable=True)       # None = illimité
+    uses_count = Column(Integer, default=0, nullable=False)
+    is_active = Column(Integer, default=1, nullable=False)  # 1=actif, 0=inactif (SQLite bool)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+

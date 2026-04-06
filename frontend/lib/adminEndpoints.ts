@@ -58,6 +58,31 @@ export interface CatalogueItemOut {
     created_at: string;
 }
 
+export interface PromoCodeOut {
+    id: number;
+    code: string;
+    discount_percent: number;
+    max_uses: number | null;
+    uses_count: number;
+    is_active: boolean;
+    expires_at: string | null;
+    created_at: string;
+}
+
+export interface PromoCodeCreate {
+    code: string;
+    discount_percent: number;
+    max_uses?: number | null;
+    expires_at?: string | null;
+}
+
+export interface PromoCodeUpdate {
+    discount_percent?: number;
+    max_uses?: number | null;
+    is_active?: boolean;
+    expires_at?: string | null;
+}
+
 export interface ImageUploadResult {
     url: string;
     width: number;
@@ -201,6 +226,24 @@ const adminApiExtended = adminApi.injectEndpoints({
                 body: formData,
             }),
         }),
+
+        // Promo codes
+        listPromo: build.query<PromoCodeOut[], void>({
+            query: () => "/promo",
+            providesTags: ["Promo"],
+        }),
+        createPromoCode: build.mutation<PromoCodeOut, PromoCodeCreate>({
+            query: (body) => ({ url: "/promo", method: "POST", body }),
+            invalidatesTags: ["Promo"],
+        }),
+        updatePromoCode: build.mutation<PromoCodeOut, { id: number } & PromoCodeUpdate>({
+            query: ({ id, ...body }) => ({ url: `/promo/${id}`, method: "PATCH", body }),
+            invalidatesTags: ["Promo"],
+        }),
+        deletePromoCode: build.mutation<{ deleted: number }, number>({
+            query: (id) => ({ url: `/promo/${id}`, method: "DELETE" }),
+            invalidatesTags: ["Promo"],
+        }),
     }),
 });
 
@@ -223,4 +266,8 @@ export const {
     useDeleteCatalogueItemMutation,
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
+    useListPromoQuery,
+    useCreatePromoCodeMutation,
+    useUpdatePromoCodeMutation,
+    useDeletePromoCodeMutation,
 } = adminApiExtended;

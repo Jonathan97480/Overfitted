@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Order, OrderStatus, Product, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Order, OrderStatus, Product, PromoCode, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 
 _UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "static", "catalogue")
@@ -507,3 +507,96 @@ async def delete_catalogue_item(item_id: int, db: DBDep):
     await db.delete(item)
     await db.commit()
     return {"deleted": item_id}
+
+
+# ─── Codes Promo ────────────────────────────────────────────────────────────
+
+class PromoCodeOut(BaseModel):
+    id: int
+    code: str
+    discount_percent: int
+    max_uses: Optional[int]
+    uses_count: int
+    is_active: bool
+    expires_at: Optional[datetime]
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_bool(cls, obj) -> "PromoCodeOut":
+        return cls(
+            id=obj.id,
+            code=obj.code,
+            discount_percent=obj.discount_percent,
+            max_uses=obj.max_uses,
+            uses_count=obj.uses_count,
+            is_active=bool(obj.is_active),
+            expires_at=obj.expires_at,
+            created_at=obj.created_at,
+        )
+
+
+class PromoCodeCreate(BaseModel):
+    code: str
+    discount_percent: int
+    max_uses: Optional[int] = None
+    expires_at: Optional[datetime] = None
+
+
+class PromoCodeUpdate(BaseModel):
+    discount_percent: Optional[int] = None
+    max_uses: Optional[int] = None
+    is_active: Optional[bool] = None
+    expires_at: Optional[datetime] = None
+
+
+@router.get("/promo", dependencies=[Depends(verify_admin_token)])
+async def list_promo_codes(db: DBDep) -> List[PromoCodeOut]:
+    result = await db.execute(select(PromoCode).order_by(PromoCode.created_at.desc()))
+    rows = result.scalars().all()
+    return [PromoCodeOut.from_orm_bool(r) for r in rows]
+
+
+@router.post("/promo", dependencies=[Depends(verify_admin_token)])
+async def create_promo_code(body: PromoCodeCreate, db: DBDep) -> PromoCodeOut:
+    existing = await db.execute(select(PromoCode).where(PromoCode.code == body.code.upper()))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Ce code existe déjà.")
+    item = PromoCode(
+        code=body.code.upper(),
+        discount_percent=body.discount_percent,
+        max_uses=body.max_uses,
+        expires_at=body.expires_at,
+        uses_count=0,
+        is_active=1,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return PromoCodeOut.from_orm_bool(item)
+
+
+@router.patch("/promo/{promo_id}", dependencies=[Depends(verify_admin_token)])
+async def update_promo_code(promo_id: int, body: PromoCodeUpdate, db: DBDep) -> PromoCodeOut:
+    item = await db.get(PromoCode, promo_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Code promo introuvable.")
+    data = body.model_dump(exclude_unset=True)
+    if "is_active" in data:
+        data["is_active"] = 1 if data["is_active"] else 0
+    for field, value in data.items():
+        setattr(item, field, value)
+    await db.commit()
+    await db.refresh(item)
+    return PromoCodeOut.from_orm_bool(item)
+
+
+@router.delete("/promo/{promo_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_promo_code(promo_id: int, db: DBDep):
+    item = await db.get(PromoCode, promo_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Code promo introuvable.")
+    await db.delete(item)
+    await db.commit()
+    return {"deleted": promo_id}
+
