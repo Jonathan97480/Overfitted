@@ -1,5 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from sqladmin import Admin
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +71,17 @@ app.include_router(roast_router)
 app.include_router(soul_router)
 app.include_router(commerce_router)
 app.include_router(admin_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Garantit que les 500 non gérés renvoient bien une JSON response
+    (le CORSMiddleware de Starlette ne couvre pas les exceptions qui ne
+    produisent pas de réponse ASGI, ce qui bloque les headers CORS)."""
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erreur interne du serveur."},
+    )
 
 
 @app.get("/")
