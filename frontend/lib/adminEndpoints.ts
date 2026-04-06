@@ -163,10 +163,16 @@ export interface DayPoint {
     value: number;
 }
 
+export interface PageViewItem {
+    url: string;
+    views: number;
+}
+
 export interface TrafficStats {
     orders_per_day: DayPoint[];
     designs_per_day: DayPoint[];
     period_days: number;
+    top_pages: PageViewItem[];
 }
 
 export interface ProductStatItem {
@@ -175,6 +181,7 @@ export interface ProductStatItem {
     category: string | null;
     sales_count: number;
     revenue: number;
+    views_count: number;
 }
 
 export interface ProductsStats {

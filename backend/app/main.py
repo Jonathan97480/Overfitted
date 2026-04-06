@@ -16,6 +16,7 @@ from app.services.soul_o_meter.router import router as soul_router
 from app.services.commerce.router import router as commerce_router
 from app.services.admin_api.router import router as admin_router
 from app.services.auth.router import router as auth_router
+from app.middleware.analytics import AnalyticsMiddleware
 
 load_dotenv()
 
@@ -41,6 +42,9 @@ app.add_middleware(
     https_only=False,  # passer à True en prod derrière HTTPS
     same_site="lax",
 )
+
+# --- Analytics (Redis, transparent si absent) ---
+app.add_middleware(AnalyticsMiddleware)
 
 
 # --- DB Dependency ---

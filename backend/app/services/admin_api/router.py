@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, PromoCode, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
+from app.middleware.analytics import get_top_pages, get_product_views
 
 _UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "static", "catalogue")
 os.makedirs(_UPLOAD_DIR, exist_ok=True)
@@ -157,10 +158,16 @@ class DayPoint(BaseModel):
     value: float
 
 
+class PageViewItem(BaseModel):
+    url: str
+    views: int
+
+
 class TrafficStats(BaseModel):
     orders_per_day: list[DayPoint]
     designs_per_day: list[DayPoint]
     period_days: int
+    top_pages: list[PageViewItem] = []
 
 
 class ProductStatItem(BaseModel):
@@ -169,6 +176,7 @@ class ProductStatItem(BaseModel):
     category: str | None
     sales_count: int
     revenue: float
+    views_count: int = 0
 
 
 class ProductsStats(BaseModel):
@@ -221,6 +229,7 @@ async def get_stats_traffic(db: DBDep, days: int = Query(30, ge=7, le=90)):
         orders_per_day=[DayPoint(date=r.day, value=r.cnt) for r in orders_rows],
         designs_per_day=[DayPoint(date=r.day, value=r.cnt) for r in designs_rows],
         period_days=days,
+        top_pages=[PageViewItem(**p) for p in await get_top_pages(10)],
     )
 
 
@@ -248,6 +257,12 @@ async def get_stats_products(db: DBDep):
                 revenue=round(cnt * p.price, 2),
             ))
         items.sort(key=lambda x: x.sales_count, reverse=True)
+
+        # Enrichir avec les vues Redis
+        product_ids = [item.id for item in items]
+        views_map = await get_product_views(product_ids)
+        for item in items:
+            item.views_count = views_map.get(item.id, 0)
 
     # Top 5 designs par nombre de commandes
     design_rows = (await db.execute(

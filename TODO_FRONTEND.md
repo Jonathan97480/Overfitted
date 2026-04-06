@@ -189,30 +189,30 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 > Données agrégées côté backend, affichées via graphes Recharts.
 
 #### Prérequis backend
-- [ ] **`GET /api/admin/stats/traffic`** — visiteurs uniques par jour/semaine/mois (via logs ou middleware compteur)
-- [ ] **`GET /api/admin/stats/products`** — produits les plus consultés + les plus vendus (compteur vues + agrégat orders)
-- [ ] **`GET /api/admin/stats/finance`** — revenus (Stripe) et dépenses (Printful) par période
-- [ ] **Middleware compteur vues** — `backend/app/middleware/analytics.py` : incrémente un compteur Redis `views:{product_id}` à chaque `GET /api/products/{id}`
+- [x] **`GET /api/admin/stats/traffic`** — visiteurs uniques par jour/semaine/mois (via logs ou middleware compteur)
+- [x] **`GET /api/admin/stats/products`** — produits les plus consultés + les plus vendus (compteur vues + agrégat orders)
+- [x] **`GET /api/admin/stats/finance`** — revenus (Stripe) et dépenses (Printful) par période
+- [x] **Middleware compteur vues** — `backend/app/middleware/analytics.py` : incrémente un compteur Redis `views:{product_id}` à chaque `GET /api/products/{id}`
 
 #### Composants frontend
-- [ ] **`StatsNav`** — sub-nav horizontale dans la page : Trafic | Produits | Finances
-- [ ] **Sous-section Trafic**
+- [x] **`StatsNav`** — sub-nav horizontale dans la page : Trafic | Produits | Finances
+- [x] **Sous-section Trafic**
   - `UniqueVisitorsChart` — courbe (Recharts `LineChart`) visiteurs uniques sur 30 jours, sélecteur période (7j / 30j / 90j)
   - `TopPagesTable` — tableau : URL | Vues | Visiteurs uniques | Taux de rebond estimé
-- [ ] **Sous-section Produits**
+- [x] **Sous-section Produits**
   - `MostViewedProducts` — top 10 articles consultés : thumbnail + nom + compteur vues + badge catégorie
   - `BestSellersChart` — bar chart horizontal (Recharts `BarChart`) top 5 articles vendus, axe = quantité vendue
   - `SalesRankTable` — tableau complet : Produit | Vues | Ventes | Taux conversion (ventes/vues %)
-- [ ] **Sous-section Finances**
+- [x] **Sous-section Finances**
   - `FinanceSummaryCards` — 3 cartes : Revenus bruts (Stripe) | Coûts Printful | Marge nette — avec delta vs période précédente
   - `RevenueVsCostChart` — area chart (Recharts `AreaChart`) 2 séries : Revenus vs Dépenses sur 30 jours
-  - `TransactionsTable` — tableau paginé : Date | Stripe Payment ID | Montant | Coût Printful | Marge | Statut
-- [ ] **Sélecteur de période global** — date-range picker (Shadcn + `react-day-picker`) appliqué à tous les graphes de la page
-- [ ] **Export CSV** — bouton qui génère un CSV client-side depuis les données RTK Query actuelles
-- [ ] **`npm install recharts`** — librairie graphes
-- [ ] **`npm install next-sitemap`** — génération automatique `sitemap.xml` + `robots.txt`
-- [ ] **`sitemap.xml`** — toutes les pages publiques indexées, routes `/admin/*` et `/api/*` exclues
-- [ ] **`robots.txt`** — `Disallow: /admin`, `Disallow: /api`, `Allow: /`
+  - `TransactionsTable` — tableau paginé : Date | Revenus | Coûts Printful | Marge | Marge %
+- [x] **Sélecteur de période global** — date-range picker (Shadcn + `react-day-picker`) appliqué à tous les graphes de la page
+- [x] **Export CSV** — bouton qui génère un CSV client-side depuis les données RTK Query actuelles
+- [x] **`npm install recharts`** — librairie graphes
+- [x] **`npm install next-sitemap`** — génération automatique `sitemap.xml` + `robots.txt`
+- [x] **`sitemap.xml`** — toutes les pages publiques indexées, routes `/admin/*` et `/api/*` exclues
+- [x] **`robots.txt`** — `Disallow: /admin`, `Disallow: /api`, `Allow: /`
 
 ---
 
