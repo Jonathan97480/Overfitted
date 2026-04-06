@@ -19,30 +19,55 @@ celery_app.conf.update(
 
 @celery_app.task(bind=True, name="fixer.vectorize")
 def vectorize_task(self, file_bytes_hex: str) -> dict:
-    """Tache Celery : upscale + vectorisation SVG d une image.
+    """Tache Celery : pipeline complet — background removal + upscale + vectorisation SVG.
 
     Accepte les bytes encodes en hex (JSON-serialisable).
-    Retourne le chemin du fichier SVG genere.
+    Retourne le chemin du fichier SVG (ou PNG si vtracer absent) + format.
+    rembg et vtracer sont optionnels en dev ; requis en prod (Dockerfile).
     """
     import tempfile
-    from app.services.fixer.image_utils import validate_and_open_image, upscale_to_print
+    import io as _io
+    from app.services.fixer.image_utils import (
+        validate_and_open_image,
+        upscale_to_print,
+        remove_background,
+        vectorize_to_svg,
+        REMBG_AVAILABLE,
+        VTRACER_AVAILABLE,
+    )
 
     self.update_state(state="PROCESSING", meta={"step": "validation"})
-
     file_bytes = bytes.fromhex(file_bytes_hex)
     img = validate_and_open_image(file_bytes)
 
+    # Étape 1 : suppression du fond (si rembg disponible)
+    if REMBG_AVAILABLE:
+        self.update_state(state="PROCESSING", meta={"step": "rembg"})
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        file_bytes = remove_background(buf.getvalue())
+        img = validate_and_open_image(file_bytes)
+
+    # Étape 2 : upscale si DPI insuffisant
     self.update_state(state="PROCESSING", meta={"step": "upscale"})
     img = upscale_to_print(img)
 
-    # Placeholder : vtracer non installe — sauvegarde PNG upscale en attendant
+    # Étape 3 : vectorisation SVG (si vtracer disponible) ou fallback PNG
     self.update_state(state="PROCESSING", meta={"step": "output"})
-    suffix = ".png"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        img.save(tmp.name)
-        output_path = tmp.name
+    if VTRACER_AVAILABLE:
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        svg_str = vectorize_to_svg(buf.getvalue())
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".svg", mode="w", encoding="utf-8") as tmp:
+            tmp.write(svg_str)
+            output_path = tmp.name
+        return {"status": "done", "output_path": output_path, "format": "SVG"}
+    else:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            img.save(tmp.name)
+            output_path = tmp.name
+        return {"status": "done", "output_path": output_path, "format": "PNG", "note": "vtracer absent — PNG upscale"}
 
-    return {"status": "done", "output_path": output_path, "format": "PNG"}
 
 @celery_app.task(bind=True, name="roast.analyze")
 def roast_task(self, analysis_data: dict) -> dict:

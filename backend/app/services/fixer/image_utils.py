@@ -3,6 +3,20 @@ import io
 
 MIN_DPI = 300
 
+# Import conditionnel — rembg et vtracer sont optionnels en dev local,
+# requis en production (installés dans le Dockerfile via Rust toolchain).
+try:
+    from rembg import remove as _rembg_remove
+    REMBG_AVAILABLE = True
+except ImportError:
+    REMBG_AVAILABLE = False
+
+try:
+    import vtracer as _vtracer
+    VTRACER_AVAILABLE = True
+except ImportError:
+    VTRACER_AVAILABLE = False
+
 
 def validate_and_open_image(file_bytes: bytes) -> Image.Image:
     """Valide et ouvre une image depuis des bytes.
@@ -39,3 +53,60 @@ def upscale_to_print(img: Image.Image, target_dpi: int = MIN_DPI) -> Image.Image
     new_size = (int(img.width * scale), int(img.height * scale))
     upscaled = img.resize(new_size, Image.LANCZOS)
     return upscaled
+
+
+def remove_background(image_bytes: bytes) -> bytes:
+    """Supprime le fond d une image via rembg (ONNX U2Net).
+
+    Retourne les bytes PNG avec canal alpha.
+    Leve ImportError si rembg n est pas installe (prod uniquement).
+    Leve ValueError si les bytes ne sont pas une image valide.
+    """
+    if not REMBG_AVAILABLE:
+        raise ImportError(
+            "rembg n est pas installe. "
+            "En production, il est fourni via le Dockerfile. "
+            "En local : pip install rembg (necessite ONNX runtime)"
+        )
+    try:
+        result = _rembg_remove(image_bytes)
+        return bytes(result)
+    except Exception as e:
+        raise ValueError(f"Erreur rembg : {e}")
+
+
+def vectorize_to_svg(image_bytes: bytes) -> str:
+    """Vectorise une image en SVG via vtracer.
+
+    Retourne le contenu SVG sous forme de chaine de caracteres.
+    Leve ImportError si vtracer n est pas installe (prod uniquement).
+    Leve ValueError si les bytes ne sont pas une image valide.
+
+    Note : vtracer fonctionne mieux sur des images avec fond transparent
+    (passer dans remove_background d abord si necessaire).
+    """
+    if not VTRACER_AVAILABLE:
+        raise ImportError(
+            "vtracer n est pas installe. "
+            "En production, il est fourni via le Dockerfile (Rust toolchain). "
+            "En local : pip install vtracer (necessite Rust)"
+        )
+    try:
+        # vtracer attend un chemin fichier — on passe via bytes
+        svg_str = _vtracer.convert_raw_image_to_svg(
+            image_bytes,
+            colormode="color",
+            hierarchical="stacked",
+            mode="spline",
+            filter_speckle=4,
+            color_precision=6,
+            layer_difference=16,
+            corner_threshold=60,
+            length_threshold=4.0,
+            max_iterations=10,
+            splice_threshold=45,
+            path_precision=8,
+        )
+        return svg_str
+    except Exception as e:
+        raise ValueError(f"Erreur vtracer : {e}")

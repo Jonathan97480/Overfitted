@@ -13,6 +13,8 @@ from app.services.fixer.image_utils import (
     validate_and_open_image,
     check_print_ready,
     upscale_to_print,
+    remove_background,
+    vectorize_to_svg,
 )
 
 
@@ -124,6 +126,90 @@ async def test_upload_image_invalid_bytes():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/fixer/upload", files={"file": ("bad.png", buf, "image/png")})
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Tests : remove_background
+# ---------------------------------------------------------------------------
+
+def test_remove_background_not_available_raises_import_error():
+    with patch("app.services.fixer.image_utils.REMBG_AVAILABLE", False):
+        with pytest.raises(ImportError, match="rembg"):
+            remove_background(b"some_bytes")
+
+
+def test_remove_background_calls_rembg_and_returns_bytes():
+    with patch("app.services.fixer.image_utils.REMBG_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._rembg_remove", return_value=b"PNG_RESULT", create=True):
+        result = remove_background(b"input_bytes")
+    assert result == b"PNG_RESULT"
+
+
+def test_remove_background_returns_bytes_type():
+    with patch("app.services.fixer.image_utils.REMBG_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._rembg_remove", return_value=bytearray(b"\x89PNG"), create=True):
+        result = remove_background(b"input_bytes")
+    assert isinstance(result, bytes)
+
+
+def test_remove_background_rembg_error_raises_value_error():
+    with patch("app.services.fixer.image_utils.REMBG_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._rembg_remove", side_effect=Exception("ONNX error"), create=True):
+        with pytest.raises(ValueError, match="rembg"):
+            remove_background(b"bad_bytes")
+
+
+# ---------------------------------------------------------------------------
+# Tests : vectorize_to_svg
+# ---------------------------------------------------------------------------
+
+def test_vectorize_to_svg_not_available_raises_import_error():
+    with patch("app.services.fixer.image_utils.VTRACER_AVAILABLE", False):
+        with pytest.raises(ImportError, match="vtracer"):
+            vectorize_to_svg(b"some_bytes")
+
+
+def test_vectorize_to_svg_returns_svg_string():
+    fake_svg = "<svg><path d='M0,0'/></svg>"
+    mock_vtracer = MagicMock()
+    mock_vtracer.convert_raw_image_to_svg.return_value = fake_svg
+    with patch("app.services.fixer.image_utils.VTRACER_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._vtracer", mock_vtracer, create=True):
+        result = vectorize_to_svg(make_png_bytes(64, 64))
+    assert result == fake_svg
+
+
+def test_vectorize_to_svg_passes_correct_params():
+    mock_vtracer = MagicMock()
+    mock_vtracer.convert_raw_image_to_svg.return_value = "<svg/>"
+    img_bytes = make_png_bytes(64, 64)
+    with patch("app.services.fixer.image_utils.VTRACER_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._vtracer", mock_vtracer, create=True):
+        vectorize_to_svg(img_bytes)
+    call_kwargs = mock_vtracer.convert_raw_image_to_svg.call_args
+    assert call_kwargs[1]["colormode"] == "color"
+    assert call_kwargs[1]["mode"] == "spline"
+    assert call_kwargs[1]["filter_speckle"] == 4
+
+
+def test_vectorize_to_svg_error_raises_value_error():
+    mock_vtracer = MagicMock()
+    mock_vtracer.convert_raw_image_to_svg.side_effect = Exception("conversion failed")
+    with patch("app.services.fixer.image_utils.VTRACER_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._vtracer", mock_vtracer, create=True):
+        with pytest.raises(ValueError, match="vtracer"):
+            vectorize_to_svg(make_png_bytes(64, 64))
+
+
+def test_vectorize_to_svg_forwards_image_bytes():
+    mock_vtracer = MagicMock()
+    mock_vtracer.convert_raw_image_to_svg.return_value = "<svg/>"
+    img_bytes = make_png_bytes(32, 32)
+    with patch("app.services.fixer.image_utils.VTRACER_AVAILABLE", True), \
+         patch("app.services.fixer.image_utils._vtracer", mock_vtracer, create=True):
+        vectorize_to_svg(img_bytes)
+    call_args = mock_vtracer.convert_raw_image_to_svg.call_args
+    assert call_args[0][0] == img_bytes
 
 
 # ---------------------------------------------------------------------------

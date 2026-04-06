@@ -91,8 +91,8 @@
 
 - [x] `celery==5.6.3` + `redis==7.4.0` — async workers
 - [x] `python-dotenv==1.2.2` — chargement du `.env`
-- [ ] `rembg` — background removal (ONNX runtime requis)
-- [ ] `vtracer` — vectorisation SVG (C++ build tools requis)
+- [x] `rembg` — background removal (ONNX runtime requis)
+- [x] `vtracer` — vectorisation SVG (C++ build tools requis)
 - [x] `scikit-image==0.25.2` + `numpy==2.2.6` + `scipy==1.15.3` — Soul-O-Meter
 - [x] `stripe==15.0.1` + `requests==2.33.1` — Commerce
 - [ ] `openai` — optionnel (Roast Engine cloud)
