@@ -54,11 +54,13 @@
 
 ## 📊 Service : Soul-O-Meter
 
-- [ ] **`app/services/soul_o_meter/`** — créer le dossier service
-- [ ] **Algorithme d'entropie** — `scikit-image` ou `opencv-python` pour détecter le chaos organique
-- [ ] **Score Human vs AI** — retourner `{ human: 0.0-1.0, ai: 0.0-1.0 }`
-- [ ] **Endpoint `POST /soul/score`** — accepte image bytes, retourne le score
-- [ ] **Tests** — images synthétiques (IA vs photo réelle)
+- [x] **`app/services/soul_o_meter/`** — dossier créé
+- [x] **Algorithme d'entropie** — `scikit-image` : entropie Shannon, FFT, contours Sobel, variance RGB
+- [x] **Score Human vs AI** — retourne `{ human: 0.0-1.0, ai: 0.0-1.0, score, signals }`
+- [x] **Endpoint `POST /soul/score`** — accepte image, dispatche Celery, retourne `task_id`
+- [x] **Endpoint `GET /soul/status/{task_id}`** — polling statut Celery
+- [x] **Tâche Celery `soul_score_task`** — scoring asynchrone
+- [x] **Tests** — 23 tests (métriques unit, score global, endpoints, mocks Celery)
 
 ---
 
@@ -89,7 +91,6 @@
 - [x] `python-dotenv==1.2.2` — chargement du `.env`
 - [ ] `rembg` — background removal (ONNX runtime requis)
 - [ ] `vtracer` — vectorisation SVG (C++ build tools requis)
-- [ ] `scikit-image` — Soul-O-Meter
-- [ ] `opencv-python` — Soul-O-Meter
+- [x] `scikit-image==0.25.2` + `numpy==2.2.6` + `scipy==1.15.3` — Soul-O-Meter
 - [ ] `openai` — Roast Engine
 - [ ] `stripe` — Commerce

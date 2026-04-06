@@ -60,3 +60,19 @@ def roast_task(self, analysis_data: dict) -> dict:
     response = roast_image(analysis)
 
     return response.model_dump()
+
+@celery_app.task(bind=True, name="soul.score")
+def soul_score_task(self, file_bytes_hex: str) -> dict:
+    """Tache Celery : calcule le score Soul-O-Meter d une image.
+
+    Accepte les bytes encodes en hex (JSON-serialisable).
+    Retourne SoulScore serialise en dict.
+    """
+    from app.services.soul_o_meter.scorer import score_image
+
+    self.update_state(state="PROCESSING", meta={"step": "scoring"})
+
+    file_bytes = bytes.fromhex(file_bytes_hex)
+    result = score_image(file_bytes)
+
+    return dict(result)

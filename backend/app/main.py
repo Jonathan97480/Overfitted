@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from app.services.fixer.image_utils import validate_and_open_image
 from app.services.fixer.router import router as fixer_router
 from app.services.roast_engine.router import router as roast_router
+from app.services.soul_o_meter.router import router as soul_router
 
 load_dotenv()
 
@@ -68,6 +69,7 @@ admin.add_view(UserAdmin)
 
 app.include_router(fixer_router)
 app.include_router(roast_router)
+app.include_router(soul_router)
 
 
 @app.get("/")
