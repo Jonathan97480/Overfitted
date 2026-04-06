@@ -377,6 +377,11 @@ const adminApiExtended = adminApi.injectEndpoints({
         // Settings
         getSettings: build.query<SettingOut[], void>({
             query: () => "/settings",
+            providesTags: ["Settings"],
+        }),
+        patchSettings: build.mutation<{ updated: string[] }, { settings: Record<string, string> }>({
+            query: (body) => ({ url: "/settings", method: "PATCH", body }),
+            invalidatesTags: ["Settings"],
         }),
         testService: build.mutation<ServiceTestResult, string>({
             query: (service) => ({ url: `/settings/test/${service}`, method: "POST" }),
@@ -447,6 +452,7 @@ export const {
     useUpdatePromoCodeMutation,
     useDeletePromoCodeMutation,
     useGetSettingsQuery,
+    usePatchSettingsMutation,
     useTestServiceMutation,
     usePurgeFailedDesignsMutation,
     useListInvoicesQuery,

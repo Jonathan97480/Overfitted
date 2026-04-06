@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, PromoCode, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, PromoCode, Setting, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 from app.middleware.analytics import get_top_pages, get_product_views
 
@@ -904,6 +904,23 @@ async def delete_promo_code(promo_id: int, db: DBDep):
 
 # ─── Settings ──────────────────────────────────────────────────────────────
 
+def _get_fernet():
+    import base64, hashlib
+    from cryptography.fernet import Fernet
+    key = os.environ.get("SETTINGS_ENCRYPTION_KEY")
+    if not key:
+        raw = hashlib.sha256(b"overfitted_dev_settings_enc_key").digest()
+        key = base64.urlsafe_b64encode(raw).decode()
+    return Fernet(key.encode() if isinstance(key, str) else key)
+
+
+def _encrypt(value: str) -> str:
+    return _get_fernet().encrypt(value.encode()).decode()
+
+
+def _decrypt(token: str) -> str:
+    return _get_fernet().decrypt(token.encode()).decode()
+
 _SETTINGS_KEYS = [
     ("STRIPE_SECRET_KEY", "Stripe Secret Key"),
     ("PRINTFUL_API_KEY", "Printful API Key"),
@@ -936,13 +953,49 @@ def _mask(value: str | None) -> tuple[bool, str]:
 
 
 @router.get("/settings", response_model=list[SettingOut], dependencies=[Depends(verify_admin_token)])
-async def get_settings():
+async def get_settings(db: DBDep):
+    db_rows = {
+        r.key: r
+        for r in (await db.execute(select(Setting))).scalars().all()
+    }
     result = []
     for key, label in _SETTINGS_KEYS:
-        val = os.environ.get(key)
+        db_row = db_rows.get(key)
+        if db_row:
+            try:
+                val: str | None = _decrypt(db_row.value)
+            except Exception:
+                val = None
+        else:
+            val = os.environ.get(key)
         is_set, preview = _mask(val)
         result.append(SettingOut(key=key, label=label, is_set=is_set, preview=preview))
     return result
+
+
+class SettingsPatch(BaseModel):
+    settings: dict[str, str]
+
+
+@router.patch("/settings", dependencies=[Depends(verify_admin_token)])
+async def patch_settings(body: SettingsPatch, db: DBDep):
+    valid_keys = {k for k, _ in _SETTINGS_KEYS}
+    updated: list[str] = []
+    for key, plain_value in body.settings.items():
+        if key not in valid_keys:
+            raise HTTPException(status_code=400, detail=f"Clé inconnue : {key}")
+        encrypted = _encrypt(plain_value)
+        existing = (
+            await db.execute(select(Setting).where(Setting.key == key))
+        ).scalar_one_or_none()
+        if existing:
+            existing.value = encrypted
+        else:
+            db.add(Setting(key=key, value=encrypted))
+        os.environ[key] = plain_value
+        updated.append(key)
+    await db.commit()
+    return {"updated": updated}
 
 
 @router.post("/settings/test/{service}", response_model=ServiceTestResult, dependencies=[Depends(verify_admin_token)])

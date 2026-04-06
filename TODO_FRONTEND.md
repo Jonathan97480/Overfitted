@@ -322,9 +322,9 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 > Sauvegarde via `PATCH /api/admin/settings` — valeurs stockées en base chiffrées (ou `.env` rechargé).
 
 #### Prérequis backend
-- [ ] **Modèle `Settings`** — table `settings` : `key` (unique), `value` (chiffré), `updated_at`
-- [ ] **`GET /api/admin/settings`** — retourne les clés avec valeur masquée (`***` sauf si explicitement demandé)
-- [ ] **`PATCH /api/admin/settings`** — met à jour une ou plusieurs clés
+- [x] **Modèle `Settings`** — table `settings` : `key` (unique), `value` (chiffré), `updated_at`
+- [x] **`GET /api/admin/settings`** — retourne les clés avec valeur masquée (`***` sauf si explicitement demandé)
+- [x] **`PATCH /api/admin/settings`** — met à jour une ou plusieurs clés
 
 #### Composants frontend
 - [x] **`SettingsPage`** — layout en sections accordéon (Shadcn Accordion)

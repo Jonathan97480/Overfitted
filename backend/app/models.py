@@ -134,3 +134,17 @@ class Invoice(Base):
 
     order = relationship("Order", foreign_keys=[order_id])
 
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, nullable=False, index=True)
+    value = Column(String, nullable=False)  # valeur chiffrée (Fernet)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
