@@ -38,3 +38,7 @@ coverage/
 .env
 .env.local
 .env.*.local
+
+# Uploaded / generated static files — user content, not tracked in git
+backend/static/catalogue/
+backend/db.sqlite3
