@@ -66,22 +66,24 @@
 
 ## 🛒 Service : Commerce
 
-- [ ] **`app/services/commerce/`** — créer le dossier service
-- [ ] **Modèles SQLAlchemy** — `Design`, `Order`, `Product`
-- [ ] **Intégration Stripe** — checkout session, webhook `payment_intent.succeeded`
-- [ ] **Intégration Printful** — créer une commande POD après paiement confirmé
-- [ ] **Endpoint `POST /commerce/checkout`** — crée une Stripe session
-- [ ] **Endpoint `POST /commerce/webhook`** — reçoit les événements Stripe
-- [ ] **Tests** — mock Stripe + Printful
+- [x] **`app/services/commerce/`** — dossier créé
+- [x] **Modèles SQLAlchemy** — `Design`, `Order`, `Product`
+- [x] **Intégration Stripe** — checkout session + webhook `checkout.session.completed`
+- [x] **Intégration Printful** — `create_printful_order()` + `get_printful_order()`
+- [x] **Endpoint `POST /commerce/checkout`** — crée une Stripe session
+- [x] **Endpoint `POST /commerce/webhook`** — reçoit les événements Stripe (signature vérifiée)
+- [x] **Endpoint `POST /commerce/printful/order`** — soumet une commande POD
+- [x] **Tests** — 19 tests (Stripe mock, Printful mock, endpoints)
 
 ---
 
 ## 🗄️ Modèles de données
 
 - [x] `User`
-- [ ] `Design` — `id`, `user_id`, `original_url`, `svg_url`, `dpi`, `status`, `created_at`
-- [ ] `Order` — `id`, `user_id`, `design_id`, `stripe_session_id`, `printful_order_id`, `status`
-- [ ] `Product` — `id`, `name`, `printful_variant_id`, `price`, `category`
+- [x] `Design` — `id`, `user_id`, `original_url`, `svg_url`, `dpi`, `status`, `created_at`
+- [x] `Order` — `id`, `user_id`, `design_id`, `stripe_session_id`, `printful_order_id`, `status`
+- [x] `Product` — `id`, `name`, `printful_variant_id`, `price`, `category`
+- [x] **Migration Alembic** `add_design_order_product`
 
 ---
 
@@ -92,5 +94,5 @@
 - [ ] `rembg` — background removal (ONNX runtime requis)
 - [ ] `vtracer` — vectorisation SVG (C++ build tools requis)
 - [x] `scikit-image==0.25.2` + `numpy==2.2.6` + `scipy==1.15.3` — Soul-O-Meter
-- [ ] `openai` — Roast Engine
-- [ ] `stripe` — Commerce
+- [x] `stripe==15.0.1` + `requests==2.33.1` — Commerce
+- [ ] `openai` — optionnel (Roast Engine cloud)

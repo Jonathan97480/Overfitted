@@ -12,6 +12,7 @@ from app.services.fixer.image_utils import validate_and_open_image
 from app.services.fixer.router import router as fixer_router
 from app.services.roast_engine.router import router as roast_router
 from app.services.soul_o_meter.router import router as soul_router
+from app.services.commerce.router import router as commerce_router
 
 load_dotenv()
 
@@ -62,14 +63,18 @@ class SimpleAuth(AuthenticationBackend):
 
 
 # Import et enregistrement des vues admin
-from app.admin import UserAdmin
+from app.admin import UserAdmin, DesignAdmin, OrderAdmin, ProductAdmin
 admin = Admin(app, engine, authentication_backend=SimpleAuth(secret_key=os.getenv("SECRET_KEY", "overfitted-dev-secret")))
 admin.add_view(UserAdmin)
+admin.add_view(DesignAdmin)
+admin.add_view(OrderAdmin)
+admin.add_view(ProductAdmin)
 
 
 app.include_router(fixer_router)
 app.include_router(roast_router)
 app.include_router(soul_router)
+app.include_router(commerce_router)
 
 
 @app.get("/")
