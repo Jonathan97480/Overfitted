@@ -7,6 +7,10 @@ export interface StatsResponse {
     total_revenue: number;
     orders_by_status: Record<string, number>;
     designs_by_status: Record<string, number>;
+    delta_users: number;
+    delta_designs: number;
+    delta_orders: number;
+    delta_revenue: number;
 }
 
 export interface UserOut {
@@ -52,6 +56,7 @@ export interface ProductOut {
     printful_variant_id: string;
     price: number;
     category: string | null;
+    image_url: string | null;
 }
 
 export type CatalogueStatus = "draft" | "active" | "archived";
@@ -287,7 +292,7 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         updateProduct: build.mutation<
             ProductOut,
-            { id: number; name?: string; price?: number; category?: string | null }
+            { id: number; name?: string; price?: number; category?: string | null; image_url?: string | null }
         >({
             query: ({ id, ...body }) => ({
                 url: `/products/${id}`,

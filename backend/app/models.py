@@ -69,6 +69,7 @@ class Product(Base):
     printful_variant_id = Column(String, nullable=False, unique=True)
     price = Column(Float, nullable=False)
     category = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
 
 class CatalogueStatus(str, enum.Enum):

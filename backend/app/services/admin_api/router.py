@@ -54,20 +54,36 @@ class StatsResponse(BaseModel):
     total_revenue: float
     orders_by_status: dict[str, int]
     designs_by_status: dict[str, int]
+    # % variation vs 30 jours précédents (0.0 si non calculable)
+    delta_users: float = 0.0
+    delta_designs: float = 0.0
+    delta_orders: float = 0.0
+    delta_revenue: float = 0.0
+
+
+def _pct_change(current: int | float, previous: int | float) -> float:
+    """% de variation entre deux périodes. Retourne 0 si previous == 0 et current == 0."""
+    if previous == 0:
+        return 100.0 if current > 0 else 0.0
+    return round((current - previous) / previous * 100, 1)
 
 
 @router.get("/stats", response_model=StatsResponse, dependencies=[Depends(verify_admin_token)])
 async def get_stats(db: DBDep):
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = now - timedelta(days=30)
+    sixty_days_ago = now - timedelta(days=60)
+
     total_users = (await db.execute(select(func.count(User.id)))).scalar_one()
     total_designs = (await db.execute(select(func.count(Design.id)))).scalar_one()
     total_orders = (await db.execute(select(func.count(Order.id)))).scalar_one()
 
     # Revenus : nombre de commandes payées × prix moyen des produits
-    # Order n'a pas de champ amount — on somme les prix des produits référencés
     total_revenue = 0.0
     paid_count = (
         await db.execute(select(func.count(Order.id)).where(Order.status == OrderStatus.paid))
     ).scalar_one()
+    avg_price = 0.0
     if paid_count > 0:
         avg_price_row = await db.execute(select(func.avg(Product.price)))
         avg_price = avg_price_row.scalar_one_or_none() or 0.0
@@ -87,6 +103,40 @@ async def get_stats(db: DBDep):
         ).scalar_one()
         designs_by_status[status.value] = count
 
+    # ─── Deltas (30j courant vs 30j précédents) ────────────────────────────
+    designs_curr = (await db.execute(
+        select(func.count(Design.id)).where(Design.created_at >= thirty_days_ago)
+    )).scalar_one()
+    designs_prev = (await db.execute(
+        select(func.count(Design.id)).where(
+            Design.created_at >= sixty_days_ago, Design.created_at < thirty_days_ago
+        )
+    )).scalar_one()
+
+    orders_curr = (await db.execute(
+        select(func.count(Order.id)).where(Order.created_at >= thirty_days_ago)
+    )).scalar_one()
+    orders_prev = (await db.execute(
+        select(func.count(Order.id)).where(
+            Order.created_at >= sixty_days_ago, Order.created_at < thirty_days_ago
+        )
+    )).scalar_one()
+
+    paid_curr = (await db.execute(
+        select(func.count(Order.id)).where(
+            Order.status == OrderStatus.paid, Order.created_at >= thirty_days_ago
+        )
+    )).scalar_one()
+    paid_prev = (await db.execute(
+        select(func.count(Order.id)).where(
+            Order.status == OrderStatus.paid,
+            Order.created_at >= sixty_days_ago,
+            Order.created_at < thirty_days_ago,
+        )
+    )).scalar_one()
+    rev_curr = round(paid_curr * avg_price, 2)
+    rev_prev = round(paid_prev * avg_price, 2)
+
     return StatsResponse(
         total_users=total_users,
         total_designs=total_designs,
@@ -94,6 +144,9 @@ async def get_stats(db: DBDep):
         total_revenue=total_revenue,
         orders_by_status=orders_by_status,
         designs_by_status=designs_by_status,
+        delta_designs=_pct_change(designs_curr, designs_prev),
+        delta_orders=_pct_change(orders_curr, orders_prev),
+        delta_revenue=_pct_change(rev_curr, rev_prev),
     )
 
 
@@ -433,6 +486,7 @@ class ProductOut(BaseModel):
     printful_variant_id: str
     price: float
     category: Optional[str]
+    image_url: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -441,12 +495,14 @@ class ProductCreate(BaseModel):
     printful_variant_id: str
     price: float
     category: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
     category: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 @router.get("/products", response_model=list[ProductOut], dependencies=[Depends(verify_admin_token)])
