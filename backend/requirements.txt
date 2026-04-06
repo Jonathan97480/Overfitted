@@ -46,5 +46,5 @@ requests==2.33.1
 PyJWT==2.12.1
 # rembg et vtracer sont installés via Dockerfile (nécessitent Rust toolchain + ONNX runtime)
 # Décommenter pour dev local si la toolchain Rust est disponible :
-# rembg
-# vtracer
+rembg
+vtracer

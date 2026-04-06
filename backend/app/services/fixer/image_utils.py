@@ -58,9 +58,9 @@ def upscale_to_print(img: Image.Image, target_dpi: int = MIN_DPI) -> Image.Image
 def remove_background(image_bytes: bytes) -> bytes:
     """Supprime le fond d une image via rembg (ONNX U2Net).
 
-    Retourne les bytes PNG avec canal alpha.
-    Leve ImportError si rembg n est pas installe (prod uniquement).
-    Leve ValueError si les bytes ne sont pas une image valide.
+    Retourne les bytes PNG avec canal alpha propre (sans frange sombre).
+    Utilise alpha_matting pour des bords nets, puis supprime les pixels
+    semi-transparents sombres residuels (defringing).
     """
     if not REMBG_AVAILABLE:
         raise ImportError(
@@ -69,10 +69,67 @@ def remove_background(image_bytes: bytes) -> bytes:
             "En local : pip install rembg (necessite ONNX runtime)"
         )
     try:
-        result = _rembg_remove(image_bytes)
-        return bytes(result)
-    except Exception as e:
-        raise ValueError(f"Erreur rembg : {e}")
+        # Alpha matting = bords beaucoup plus propres (plus lent mais necessaire)
+        result_bytes = bytes(_rembg_remove(
+            image_bytes,
+            alpha_matting=True,
+            alpha_matting_foreground_threshold=240,
+            alpha_matting_background_threshold=10,
+            alpha_matting_erode_size=6,
+        ))
+    except Exception:
+        # Fallback sans alpha_matting si l image est trop petite pour pymatting
+        try:
+            result_bytes = bytes(_rembg_remove(image_bytes))
+        except Exception as e:
+            raise ValueError(f"Erreur rembg : {e}")
+
+    # Defringing : supprimer les pixels de bord parasites (sombres ET clairs)
+    try:
+        img = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
+
+        import numpy as _np
+        rgba_arr = _np.array(img, dtype=_np.uint8)
+        a_arr = rgba_arr[:, :, 3]
+
+        # 1 — Pixels quasi-transparents : forcer à transparent pur
+        mask_low = a_arr < 25
+        rgba_arr[mask_low] = [0, 0, 0, 0]
+
+        luminance = (0.299 * rgba_arr[:, :, 0].astype(float)
+                   + 0.587 * rgba_arr[:, :, 1].astype(float)
+                   + 0.114 * rgba_arr[:, :, 2].astype(float))
+
+        # 2 — Frange sombre : pixels noirs/gris foncés semi-transparents sur bord
+        mask_dark = (luminance < 50) & (a_arr < 200)
+        rgba_arr[mask_dark] = [0, 0, 0, 0]
+
+        # 3 — Frange claire/blanche : pixels très lumineux résidus de fond clair
+        #     Seuil alpha plus strict ici pour ne pas effacer les cheveux blancs
+        #     On cible uniquement les pixels qui sont PRESQUE transparents
+        mask_white = (luminance > 210) & (a_arr < 80)
+        rgba_arr[mask_white] = [0, 0, 0, 0]
+
+        # 4 — Érosion douce du canal alpha pour réduire la frange résiduelle
+        #     (scipy optionnel, fallback sans)
+        try:
+            from scipy.ndimage import binary_erosion as _be
+            alpha_binary = a_arr > 128
+            eroded = _be(alpha_binary, iterations=1)
+            # Pixels retirés par l'érosion : transparents
+            removed = alpha_binary & ~eroded
+            rgba_arr[removed] = [0, 0, 0, 0]
+        except ImportError:
+            pass
+
+        out = Image.fromarray(rgba_arr, "RGBA")
+        buf = io.BytesIO()
+        out.save(buf, format="PNG")
+        return buf.getvalue()
+    except ImportError:
+        return result_bytes
+    except Exception:
+        return result_bytes
 
 
 def vectorize_to_svg(image_bytes: bytes) -> str:
@@ -92,20 +149,19 @@ def vectorize_to_svg(image_bytes: bytes) -> str:
             "En local : pip install vtracer (necessite Rust)"
         )
     try:
-        # vtracer attend un chemin fichier — on passe via bytes
         svg_str = _vtracer.convert_raw_image_to_svg(
             image_bytes,
             colormode="color",
             hierarchical="stacked",
             mode="spline",
-            filter_speckle=4,
-            color_precision=6,
-            layer_difference=16,
-            corner_threshold=60,
-            length_threshold=4.0,
-            max_iterations=10,
-            splice_threshold=45,
-            path_precision=8,
+            filter_speckle=2,        # moins de bruit supprimé → plus de détail
+            color_precision=8,       # précision couleur maximale
+            layer_difference=8,      # plus de couches couleur → moins de blocs plats
+            corner_threshold=40,     # coins plus nets
+            length_threshold=2.0,    # chemins plus fins → plus de détail
+            max_iterations=20,       # meilleur ajustement des courbes
+            splice_threshold=35,
+            path_precision=10,
         )
         return svg_str
     except Exception as e:

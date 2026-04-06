@@ -58,7 +58,21 @@ export interface CatalogueItemOut {
     created_at: string;
 }
 
-export const adminApiExtended = adminApi.injectEndpoints({
+export interface ImageUploadResult {
+    url: string;
+    width: number;
+    height: number;
+    dpi: number;
+    print_ready: boolean;
+}
+
+export interface ImageProcessResult extends ImageUploadResult {
+    bg_removed: boolean;
+    upscaled: boolean;
+    vectorized: boolean;
+}
+
+const adminApiExtended = adminApi.injectEndpoints({
     endpoints: (build) => ({
         // Stats
         getStats: build.query<StatsResponse, void>({
@@ -173,9 +187,16 @@ export const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/catalogue/${id}`, method: "DELETE" }),
             invalidatesTags: ["Catalogue"],
         }),
-        uploadCatalogueImage: build.mutation<{ url: string }, FormData>({
+        uploadCatalogueImage: build.mutation<ImageUploadResult, FormData>({
             query: (formData) => ({
                 url: "/catalogue/upload-image",
+                method: "POST",
+                body: formData,
+            }),
+        }),
+        processCatalogueImage: build.mutation<ImageProcessResult, FormData>({
+            query: (formData) => ({
+                url: "/catalogue/process-image",
                 method: "POST",
                 body: formData,
             }),
@@ -201,4 +222,5 @@ export const {
     useUpdateCatalogueItemMutation,
     useDeleteCatalogueItemMutation,
     useUploadCatalogueImageMutation,
+    useProcessCatalogueImageMutation,
 } = adminApiExtended;

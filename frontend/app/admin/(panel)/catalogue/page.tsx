@@ -6,8 +6,11 @@ import {
     useUpdateCatalogueItemMutation,
     useDeleteCatalogueItemMutation,
     useUploadCatalogueImageMutation,
+    useProcessCatalogueImageMutation,
     type CatalogueItemOut,
     type CatalogueStatus,
+    type ImageUploadResult,
+    type ImageProcessResult,
 } from "@/lib/adminEndpoints";
 import {
     Table,
@@ -32,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Pencil, Trash2, Plus, Upload, ImageIcon } from "lucide-react";
+import { Pencil, Trash2, Plus, Upload, ImageIcon, Wand2, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -76,17 +79,27 @@ export default function AdminCataloguePage() {
     const [updateItem] = useUpdateCatalogueItemMutation();
     const [deleteItem] = useDeleteCatalogueItemMutation();
     const [uploadImage] = useUploadCatalogueImageMutation();
+    const [processImage] = useProcessCatalogueImageMutation();
 
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<CatalogueItemOut | null>(null);
     const [form, setForm] = useState<FormData>(EMPTY);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [imgMeta, setImgMeta] = useState<ImageUploadResult | ImageProcessResult | null>(null);
+    const [removeBg, setRemoveBg] = useState(false);
+    const [upscale, setUpscale] = useState(true);
+    const [vectorize, setVectorize] = useState(false);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
     function openCreate() {
         setEditing(null);
         setForm(EMPTY);
+        setImgMeta(null);
+        setRemoveBg(false);
+        setUpscale(true);
+        setVectorize(false);
         setOpen(true);
     }
 
@@ -102,18 +115,35 @@ export default function AdminCataloguePage() {
             tags: item.tags ?? "",
             image_url: item.image_url ?? "",
         });
+        setImgMeta(null);
         setOpen(true);
     }
 
     async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
+        // Reset input pour permettre re-upload du meme fichier
+        e.target.value = "";
         setUploading(true);
+        setImgMeta(null);
         try {
             const fd = new FormData();
             fd.append("file", file);
-            const res = await uploadImage(fd).unwrap();
-            setForm((f) => ({ ...f, image_url: res.url }));
+            if (removeBg || upscale || vectorize) {
+                fd.append("remove_bg", String(removeBg));
+                fd.append("upscale", String(upscale));
+                fd.append("vectorize", String(vectorize));
+                const res = await processImage(fd).unwrap();
+                setForm((f) => ({ ...f, image_url: res.url }));
+                setImgMeta(res);
+            } else {
+                const res = await uploadImage(fd).unwrap();
+                setForm((f) => ({ ...f, image_url: res.url }));
+                setImgMeta(res);
+            }
+        } catch (err: unknown) {
+            const msg = (err as { data?: { detail?: string } })?.data?.detail ?? "Erreur upload";
+            alert(msg);
         } finally {
             setUploading(false);
         }
@@ -238,7 +268,7 @@ export default function AdminCataloguePage() {
                                         </TableCell>
                                     </TableRow>
                                 )
-                                : items?.map((item) => (
+                                : items?.map((item: CatalogueItemOut) => (
                                     <TableRow
                                         key={item.id}
                                         style={{ borderColor: "var(--admin-border)" }}
@@ -247,13 +277,18 @@ export default function AdminCataloguePage() {
                                         {/* Visuel */}
                                         <TableCell>
                                             {item.image_url ? (
-                                                <div className="w-10 h-10 rounded overflow-hidden">
+                                                <button
+                                                    type="button"
+                                                    className="w-10 h-10 rounded overflow-hidden block hover:ring-2 hover:ring-[var(--admin-accent)] transition"
+                                                    onClick={() => setLightboxUrl(`${API_URL}${item.image_url}`)}
+                                                    title="Voir en grand"
+                                                >
                                                     <img
                                                         src={`${API_URL}${item.image_url}`}
                                                         alt={item.title}
                                                         className="w-full h-full object-cover"
                                                     />
-                                                </div>
+                                                </button>
                                             ) : (
                                                 <div
                                                     style={{ border: "1px solid var(--admin-border)" }}
@@ -343,60 +378,133 @@ export default function AdminCataloguePage() {
                     </DialogHeader>
 
                     <div className="space-y-4 mt-2">
-                        {/* Upload image */}
-                        <div>
-                            <label className="block text-xs text-[var(--admin-muted-2)] mb-2">
+                        {/* Upload image + pipeline */}
+                        <div
+                            style={{ border: "1px solid var(--admin-border)", background: "var(--admin-sidebar)" }}
+                            className="rounded-lg p-3 space-y-3"
+                        >
+                            <p className="text-xs font-mono uppercase tracking-widest text-[var(--admin-muted-2)]">
                                 Image du design
-                            </label>
-                            <div className="flex items-center gap-3">
-                                {form.image_url ? (
-                                    <div className="w-20 h-20 rounded overflow-hidden shrink-0">
-                                        <img
-                                            src={
-                                                form.image_url.startsWith("/")
-                                                    ? `${API_URL}${form.image_url}`
-                                                    : form.image_url
-                                            }
-                                            alt="Aperçu"
-                                            className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                (e.currentTarget as HTMLImageElement).style.display = "none";
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div
-                                        style={{ border: "1px dashed var(--admin-border)" }}
-                                        className="w-20 h-20 rounded flex flex-col items-center justify-center shrink-0 gap-1"
-                                    >
-                                        <ImageIcon size={20} className="text-[var(--admin-muted)]" />
-                                        <span className="text-[9px] text-[var(--admin-muted)] uppercase tracking-wide">
-                                            Aucune image
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex-1 space-y-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => fileRef.current?.click()}
-                                        disabled={uploading}
-                                        style={{ border: "1px solid var(--admin-border)" }}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-white hover:bg-white/5 transition disabled:opacity-50"
-                                    >
-                                        <Upload size={12} />
-                                        {uploading ? "Upload…" : "Choisir un fichier"}
-                                    </button>
-                                    {form.image_url && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setForm((f) => ({ ...f, image_url: "" }))}
-                                            className="text-xs text-red-400 hover:text-red-300"
+                            </p>
+
+                            {/* Prévisualisation */}
+                            <div className="flex items-start gap-3">
+                                <div className="shrink-0">
+                                    {form.image_url ? (
+                                        <div className="w-24 h-24 rounded overflow-hidden"
+                                            style={{ background: "repeating-conic-gradient(#b0b0b0 0% 25%, #e8e8e8 0% 50%) 0 0 / 12px 12px" }}>
+                                            <img
+                                                src={form.image_url.startsWith("/") ? `${API_URL}${form.image_url}` : form.image_url}
+                                                alt="Aperçu"
+                                                className="w-full h-full object-contain"
+                                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.3"; }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div
+                                            style={{ border: "2px dashed var(--admin-border)" }}
+                                            className="w-24 h-24 rounded flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[var(--admin-accent)] transition-colors"
+                                            onClick={() => fileRef.current?.click()}
                                         >
-                                            Supprimer l'image
-                                        </button>
+                                            <Upload size={18} className="text-[var(--admin-muted)]" />
+                                            <span className="text-[9px] text-[var(--admin-muted)] uppercase tracking-wide text-center">
+                                                Clic pour<br />importer
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
+
+                                <div className="flex-1 space-y-2">
+                                    {/* Métadonnées après upload */}
+                                    {imgMeta && (
+                                        <div
+                                            style={{ border: `1px solid ${imgMeta.print_ready ? "#10B98140" : "#F59E0B40"}`, background: `${imgMeta.print_ready ? "#10B981" : "#F59E0B"}10` }}
+                                            className="rounded p-2 space-y-0.5"
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                {imgMeta.print_ready
+                                                    ? <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                                                    : <AlertCircle size={12} className="text-amber-400 shrink-0" />
+                                                }
+                                                <span className={`text-xs font-mono font-semibold ${imgMeta.print_ready ? "text-emerald-400" : "text-amber-400"}`}>
+                                                    {imgMeta.print_ready ? "PRINT READY" : "DPI INSUFFISANT"}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-[var(--admin-muted-2)] font-mono">
+                                                {imgMeta.width}×{imgMeta.height}px · {imgMeta.dpi} DPI
+                                                {"upscaled" in imgMeta && imgMeta.upscaled && " · UPSCALÉ"}
+                                                {"bg_removed" in imgMeta && imgMeta.bg_removed && " · FOND SUPPRIMÉ"}
+                                                {"vectorized" in imgMeta && imgMeta.vectorized && " · SVG"}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Options pipeline */}
+                                    <div className="space-y-1.5">
+                                        <label className="flex items-center gap-2 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                checked={upscale}
+                                                onChange={(e) => setUpscale(e.target.checked)}
+                                                className="w-3.5 h-3.5 accent-[var(--admin-accent)]"
+                                            />
+                                            <span className="text-xs text-[var(--admin-muted-2)] group-hover:text-white transition-colors">
+                                                Correction taille / DPI → 300 dpi
+                                            </span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                checked={removeBg}
+                                                onChange={(e) => setRemoveBg(e.target.checked)}
+                                                className="w-3.5 h-3.5 accent-[var(--admin-accent)]"
+                                            />
+                                            <span className="text-xs text-[var(--admin-muted-2)] group-hover:text-white transition-colors">
+                                                Suppression arrière-plan
+                                                <span className="ml-1 text-[10px] text-[var(--admin-muted)] font-mono">(rembg)</span>
+                                            </span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                checked={vectorize}
+                                                onChange={(e) => setVectorize(e.target.checked)}
+                                                className="w-3.5 h-3.5 accent-[var(--admin-accent)]"
+                                            />
+                                            <span className="text-xs text-[var(--admin-muted-2)] group-hover:text-white transition-colors">
+                                                Vectorisation SVG
+                                                <span className="ml-1 text-[10px] text-[var(--admin-muted)] font-mono">(vtracer)</span>
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    {/* Boutons */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <button
+                                            type="button"
+                                            onClick={() => fileRef.current?.click()}
+                                            disabled={uploading}
+                                            style={{ background: "var(--admin-accent)" }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-black hover:opacity-90 transition disabled:opacity-50"
+                                        >
+                                            {uploading
+                                                ? <><Loader2 size={11} className="animate-spin" /> Traitement…</>
+                                                : <><Wand2 size={11} /> {form.image_url ? "Remplacer" : "Importer et traiter"}</>
+                                            }
+                                        </button>
+                                        {form.image_url && (
+                                            <button
+                                                type="button"
+                                                onClick={() => { setForm((f) => ({ ...f, image_url: "" })); setImgMeta(null); }}
+                                                className="text-xs text-[var(--admin-muted)] hover:text-red-400 transition"
+                                            >
+                                                Retirer
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
+
                             <input
                                 ref={fileRef}
                                 type="file"
@@ -568,6 +676,35 @@ export default function AdminCataloguePage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Lightbox */}
+            {lightboxUrl && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(6px)" }}
+                    onClick={() => setLightboxUrl(null)}
+                >
+                    <div
+                        className="relative max-w-[90vw] max-h-[90vh] rounded-lg overflow-hidden"
+                        style={{ background: "repeating-conic-gradient(#555 0% 25%, #333 0% 50%) 0 0 / 16px 16px" }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={lightboxUrl}
+                            alt="Aperçu grand format"
+                            className="block max-w-[90vw] max-h-[90vh] object-contain"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setLightboxUrl(null)}
+                            className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition font-mono text-sm"
+                            style={{ background: "rgba(0,0,0,0.6)" }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

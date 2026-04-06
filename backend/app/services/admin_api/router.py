@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from typing import Annotated, Optional, List
 from datetime import datetime
+import asyncio
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -317,7 +318,7 @@ async def create_catalogue_item(body: CatalogueItemCreate, db: DBDep):
 
 @router.post("/catalogue/upload-image", dependencies=[Depends(verify_admin_token)])
 async def upload_catalogue_image(file: UploadFile = File(...)):
-    """Upload une image pour une création catalogue. Retourne {url: '...'}"""
+    """Upload brut d'une image catalogue sans traitement. Retourne {url, width, height}"""
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
         raise HTTPException(status_code=400, detail="Format non supporté. Utilisez JPG, PNG, WEBP ou GIF.")
@@ -328,7 +329,162 @@ async def upload_catalogue_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=413, detail="Image trop lourde (max 10 Mo).")
     with open(dest, "wb") as f:
         f.write(content)
-    return {"url": f"/static/catalogue/{filename}"}
+
+    from app.services.fixer.image_utils import validate_and_open_image
+    try:
+        img = await asyncio.to_thread(validate_and_open_image, content)
+        dpi = img.info.get("dpi", (72, 72))
+        width, height = img.size
+    except Exception:
+        dpi = (72, 72)
+        width = height = 0
+
+    return {
+        "url": f"/static/catalogue/{filename}",
+        "width": width,
+        "height": height,
+        "dpi": round(float(dpi[0])),
+        "print_ready": round(float(dpi[0])) >= 300,
+    }
+
+
+@router.post("/catalogue/process-image", dependencies=[Depends(verify_admin_token)])
+async def process_catalogue_image(
+    file: UploadFile = File(...),
+    remove_bg: bool = Form(False),
+    upscale: bool = Form(True),
+    vectorize: bool = Form(False),
+):
+    """Pipeline de correction d'image pour le catalogue admin.
+
+    - Supprime le fond via rembg (optionnel)
+    - Upscale si DPI < 300 (optionnel, activé par défaut)
+    - Vectorise en SVG via vtracer (optionnel — désactive l'upscale raster)
+    - Sauvegarde dans /static/catalogue/
+    - Retourne {url, width, height, dpi, print_ready, bg_removed, upscaled, vectorized}
+    """
+    import asyncio as _asyncio
+    from app.services.fixer.image_utils import (
+        validate_and_open_image,
+        check_print_ready,
+        upscale_to_print,
+        remove_background,
+        vectorize_to_svg,
+        REMBG_AVAILABLE,
+        VTRACER_AVAILABLE,
+    )
+    import io as _io
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=422, detail="Fichier image requis.")
+
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image trop lourde (max 20 Mo).")
+
+    # 1 — Suppression du fond (avant tout traitement, meilleurs résultats)
+    bg_removed = False
+    if remove_bg:
+        if not REMBG_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Suppression de fond non disponible (rembg manquant)."
+            )
+        content = await _asyncio.to_thread(remove_background, content)
+        bg_removed = True
+
+    # 2 — Validation image
+    try:
+        img = await _asyncio.to_thread(validate_and_open_image, content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    was_upscaled = False
+    was_vectorized = False
+
+    # 3 — Vectorisation SVG (prend précédence sur l'upscale raster)
+    if vectorize:
+        if not VTRACER_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Vectorisation non disponible (vtracer manquant)."
+            )
+        # Upscale avant vectorisation pour de meilleurs contours si image petite
+        if not check_print_ready(img):
+            img = await _asyncio.to_thread(upscale_to_print, img)
+            was_upscaled = True
+        # Pré-traitement pour vtracer : résolution optimale + netteté + contraste
+        def _prepare_for_vtracer(src) -> bytes:
+            from PIL import Image as _Image, ImageEnhance, ImageFilter
+            # Taille optimale vtracer : 1200-1800px côté long (ni trop petit, ni trop grand)
+            max_side = 1600
+            w, h = src.size
+            if max(w, h) > max_side:
+                scale = max_side / max(w, h)
+                src = src.resize((int(w * scale), int(h * scale)), _Image.LANCZOS)
+            elif max(w, h) < 400:
+                scale = 400 / max(w, h)
+                src = src.resize((int(w * scale), int(h * scale)), _Image.LANCZOS)
+            # Netteté
+            src = src.filter(ImageFilter.SHARPEN)
+            src = src.filter(ImageFilter.SHARPEN)
+            # Légère augmentation du contraste
+            src = ImageEnhance.Contrast(src).enhance(1.15)
+            buf = _io.BytesIO()
+            src.save(buf, format="PNG")
+            return buf.getvalue()
+
+        prepared = await _asyncio.to_thread(_prepare_for_vtracer, img)
+        svg_str = await _asyncio.to_thread(vectorize_to_svg, prepared)
+        was_vectorized = True
+
+        filename = f"{uuid.uuid4().hex}.svg"
+        dest = os.path.join(_UPLOAD_DIR, filename)
+        with open(dest, "w", encoding="utf-8") as fh:
+            fh.write(svg_str)
+
+        dpi_out = img.info.get("dpi", (300, 300)) if was_upscaled else img.info.get("dpi", (72, 72))
+        return {
+            "url": f"/static/catalogue/{filename}",
+            "width": img.width,
+            "height": img.height,
+            "dpi": 300 if was_upscaled else round(float(dpi_out[0])),
+            "print_ready": True,
+            "bg_removed": bg_removed,
+            "upscaled": was_upscaled,
+            "vectorized": True,
+        }
+
+    # 4 — Upscale raster (sans vectorisation)
+    if upscale and not check_print_ready(img):
+        img = await _asyncio.to_thread(upscale_to_print, img)
+        was_upscaled = True
+
+    # 5 — Sérialisation PNG (préserve canal alpha si fond supprimé)
+    buf = _io.BytesIO()
+    save_fmt = "PNG" if bg_removed else (img.format or "PNG")
+    img.save(buf, format=save_fmt, dpi=(300, 300) if was_upscaled else img.info.get("dpi", (72, 72)))
+    processed = buf.getvalue()
+
+    # 6 — Sauvegarde
+    ext = ".png" if (bg_removed or save_fmt == "PNG") else f".{save_fmt.lower()}"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(_UPLOAD_DIR, filename)
+    with open(dest, "wb") as fh:
+        fh.write(processed)
+
+    dpi_out = img.info.get("dpi", (300, 300)) if was_upscaled else img.info.get("dpi", (72, 72))
+
+    return {
+        "url": f"/static/catalogue/{filename}",
+        "width": img.width,
+        "height": img.height,
+        "dpi": 300 if was_upscaled else round(float(dpi_out[0])),
+        "print_ready": True if was_upscaled else check_print_ready(img),
+        "bg_removed": bg_removed,
+        "upscaled": was_upscaled,
+        "vectorized": False,
+    }
 
 
 @router.patch("/catalogue/{item_id}", response_model=CatalogueItemOut, dependencies=[Depends(verify_admin_token)])
