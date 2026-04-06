@@ -877,6 +877,7 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
     return {"mockup_url": mockup_url, "placement_json": placement_data}
 
 
+class VariantInfo(BaseModel):
     id: int
     name: str   # ex: "Black / S"
     price: str  # coût Printful HT
