@@ -83,6 +83,19 @@ export interface PromoCodeUpdate {
     expires_at?: string | null;
 }
 
+export interface SettingOut {
+    key: string;
+    label: string;
+    is_set: boolean;
+    preview: string;
+}
+
+export interface ServiceTestResult {
+    service: string;
+    ok: boolean;
+    message: string;
+}
+
 export interface ImageUploadResult {
     url: string;
     width: number;
@@ -244,6 +257,18 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/promo/${id}`, method: "DELETE" }),
             invalidatesTags: ["Promo"],
         }),
+
+        // Settings
+        getSettings: build.query<SettingOut[], void>({
+            query: () => "/settings",
+        }),
+        testService: build.mutation<ServiceTestResult, string>({
+            query: (service) => ({ url: `/settings/test/${service}`, method: "POST" }),
+        }),
+        purgeFailedDesigns: build.mutation<{ deleted: number }, void>({
+            query: () => ({ url: "/settings/purge-failed-designs", method: "POST" }),
+            invalidatesTags: ["Design", "Stats"],
+        }),
     }),
 });
 
@@ -270,4 +295,7 @@ export const {
     useCreatePromoCodeMutation,
     useUpdatePromoCodeMutation,
     useDeletePromoCodeMutation,
+    useGetSettingsQuery,
+    useTestServiceMutation,
+    usePurgeFailedDesignsMutation,
 } = adminApiExtended;

@@ -600,3 +600,108 @@ async def delete_promo_code(promo_id: int, db: DBDep):
     await db.commit()
     return {"deleted": promo_id}
 
+
+# ─── Settings ──────────────────────────────────────────────────────────────
+
+_SETTINGS_KEYS = [
+    ("STRIPE_SECRET_KEY", "Stripe Secret Key"),
+    ("PRINTFUL_API_KEY", "Printful API Key"),
+    ("OPENAI_API_KEY", "OpenAI API Key"),
+    ("ADMIN_PASSWORD", "Admin Password"),
+    ("ADMIN_JWT_SECRET", "Admin JWT Secret"),
+    ("DATABASE_URL", "Database URL"),
+    ("REDIS_URL", "Redis URL"),
+]
+
+
+class SettingOut(BaseModel):
+    key: str
+    label: str
+    is_set: bool
+    preview: str  # "sk_live_***" or "(non défini)"
+
+
+class ServiceTestResult(BaseModel):
+    service: str
+    ok: bool
+    message: str
+
+
+def _mask(value: str | None) -> tuple[bool, str]:
+    if not value:
+        return False, "(non défini)"
+    visible = value[:6] if len(value) > 6 else value[:2]
+    return True, f"{visible}{'*' * min(8, len(value) - len(visible))}"
+
+
+@router.get("/settings", response_model=list[SettingOut], dependencies=[Depends(verify_admin_token)])
+async def get_settings():
+    result = []
+    for key, label in _SETTINGS_KEYS:
+        val = os.environ.get(key)
+        is_set, preview = _mask(val)
+        result.append(SettingOut(key=key, label=label, is_set=is_set, preview=preview))
+    return result
+
+
+@router.post("/settings/test/{service}", response_model=ServiceTestResult, dependencies=[Depends(verify_admin_token)])
+async def test_service(service: str):
+    import httpx  # noqa: PLC0415
+    service = service.lower()
+
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        try:
+            if service == "stripe":
+                key = os.environ.get("STRIPE_SECRET_KEY", "")
+                if not key:
+                    return ServiceTestResult(service="stripe", ok=False, message="STRIPE_SECRET_KEY non définie.")
+                resp = await client.get(
+                    "https://api.stripe.com/v1/balance",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                ok = resp.status_code == 200
+                msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
+
+            elif service == "openai":
+                key = os.environ.get("OPENAI_API_KEY", "")
+                if not key:
+                    return ServiceTestResult(service="openai", ok=False, message="OPENAI_API_KEY non définie.")
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                ok = resp.status_code == 200
+                msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
+
+            elif service == "printful":
+                key = os.environ.get("PRINTFUL_API_KEY", "")
+                if not key:
+                    return ServiceTestResult(service="printful", ok=False, message="PRINTFUL_API_KEY non définie.")
+                resp = await client.get(
+                    "https://api.printful.com/store",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                ok = resp.status_code == 200
+                msg = "Connecté ✓" if ok else f"Erreur {resp.status_code}"
+
+            else:
+                return ServiceTestResult(service=service, ok=False, message="Service inconnu.")
+
+        except httpx.ConnectError:
+            return ServiceTestResult(service=service, ok=False, message="Impossible de joindre le service.")
+        except httpx.TimeoutException:
+            return ServiceTestResult(service=service, ok=False, message="Timeout — service inaccessible.")
+
+    return ServiceTestResult(service=service, ok=ok, message=msg)
+
+
+@router.post("/settings/purge-failed-designs", dependencies=[Depends(verify_admin_token)])
+async def purge_failed_designs(db: DBDep):
+    result = await db.execute(select(Design).where(Design.status == DesignStatus.failed))
+    designs = result.scalars().all()
+    count = len(designs)
+    for d in designs:
+        await db.delete(d)
+    await db.commit()
+    return {"deleted": count}
+
