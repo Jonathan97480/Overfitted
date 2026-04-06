@@ -18,7 +18,7 @@ from app.database import get_db
 from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Order, OrderStatus, Product, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 
-_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "static", "catalogue")
+_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "static", "catalogue")
 os.makedirs(_UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])

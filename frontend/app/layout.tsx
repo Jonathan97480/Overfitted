@@ -27,6 +27,7 @@ export default function RootLayout({
     <html
       lang="fr"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased dark`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ReduxProvider>{children}</ReduxProvider>

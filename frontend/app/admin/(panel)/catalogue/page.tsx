@@ -1,6 +1,5 @@
 "use client";
 import { useRef, useState } from "react";
-import Image from "next/image";
 import {
     useListCatalogueQuery,
     useCreateCatalogueItemMutation,
@@ -223,107 +222,105 @@ export default function AdminCataloguePage() {
                                 </TableRow>
                             ))
                             : (items ?? []).length === 0
-                            ? (
-                                <TableRow style={{ borderColor: "var(--admin-border)" }}>
-                                    <TableCell
-                                        colSpan={7}
-                                        className="text-center py-16 text-[var(--admin-muted-2)] text-sm"
+                                ? (
+                                    <TableRow style={{ borderColor: "var(--admin-border)" }}>
+                                        <TableCell
+                                            colSpan={7}
+                                            className="text-center py-16 text-[var(--admin-muted-2)] text-sm"
+                                        >
+                                            Aucune création dans le catalogue.{" "}
+                                            <button
+                                                onClick={openCreate}
+                                                className="underline text-[var(--admin-accent)] hover:opacity-80"
+                                            >
+                                                Ajouter la première
+                                            </button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                                : items?.map((item) => (
+                                    <TableRow
+                                        key={item.id}
+                                        style={{ borderColor: "var(--admin-border)" }}
+                                        className="hover:bg-white/5 transition-colors"
                                     >
-                                        Aucune création dans le catalogue.{" "}
-                                        <button
-                                            onClick={openCreate}
-                                            className="underline text-[var(--admin-accent)] hover:opacity-80"
-                                        >
-                                            Ajouter la première
-                                        </button>
-                                    </TableCell>
-                                </TableRow>
-                            )
-                            : items?.map((item) => (
-                                <TableRow
-                                    key={item.id}
-                                    style={{ borderColor: "var(--admin-border)" }}
-                                    className="hover:bg-white/5 transition-colors"
-                                >
-                                    {/* Visuel */}
-                                    <TableCell>
-                                        {item.image_url ? (
-                                            <div className="w-10 h-10 rounded overflow-hidden relative">
-                                                <Image
-                                                    src={`${API_URL}${item.image_url}`}
-                                                    alt={item.title}
-                                                    fill
-                                                    className="object-cover"
-                                                    unoptimized
-                                                />
+                                        {/* Visuel */}
+                                        <TableCell>
+                                            {item.image_url ? (
+                                                <div className="w-10 h-10 rounded overflow-hidden">
+                                                    <img
+                                                        src={`${API_URL}${item.image_url}`}
+                                                        alt={item.title}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    style={{ border: "1px solid var(--admin-border)" }}
+                                                    className="w-10 h-10 rounded flex items-center justify-center"
+                                                >
+                                                    <ImageIcon
+                                                        size={14}
+                                                        className="text-[var(--admin-muted)]"
+                                                    />
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        {/* Titre */}
+                                        <TableCell className="text-white text-sm font-medium">
+                                            {item.title}
+                                            {item.description && (
+                                                <p className="text-[var(--admin-muted-2)] text-xs font-normal truncate max-w-48 mt-0.5">
+                                                    {item.description}
+                                                </p>
+                                            )}
+                                        </TableCell>
+                                        {/* Catégorie */}
+                                        <TableCell className="text-[var(--admin-muted-2)] text-sm">
+                                            {item.category ?? "—"}
+                                        </TableCell>
+                                        {/* Prix */}
+                                        <TableCell className="text-white text-sm font-mono">
+                                            {item.price.toFixed(2)} €
+                                        </TableCell>
+                                        {/* Statut */}
+                                        <TableCell>
+                                            <span
+                                                style={{
+                                                    color: STATUS_COLOR[item.status],
+                                                    background: STATUS_COLOR[item.status] + "20",
+                                                    borderColor: STATUS_COLOR[item.status] + "40",
+                                                }}
+                                                className="inline-block text-xs font-mono px-2 py-0.5 rounded border"
+                                            >
+                                                {STATUS_LABEL[item.status]}
+                                            </span>
+                                        </TableCell>
+                                        {/* Tags */}
+                                        <TableCell className="text-[var(--admin-muted-2)] text-xs font-mono">
+                                            {item.tags ?? "—"}
+                                        </TableCell>
+                                        {/* Actions */}
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => openEdit(item)}
+                                                    className="text-[var(--admin-muted)] hover:text-white transition-colors"
+                                                    title="Modifier"
+                                                >
+                                                    <Pencil size={13} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(item)}
+                                                    className="text-[var(--admin-muted)] hover:text-red-400 transition-colors"
+                                                    title="Supprimer"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
                                             </div>
-                                        ) : (
-                                            <div
-                                                style={{ border: "1px solid var(--admin-border)" }}
-                                                className="w-10 h-10 rounded flex items-center justify-center"
-                                            >
-                                                <ImageIcon
-                                                    size={14}
-                                                    className="text-[var(--admin-muted)]"
-                                                />
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                    {/* Titre */}
-                                    <TableCell className="text-white text-sm font-medium">
-                                        {item.title}
-                                        {item.description && (
-                                            <p className="text-[var(--admin-muted-2)] text-xs font-normal truncate max-w-48 mt-0.5">
-                                                {item.description}
-                                            </p>
-                                        )}
-                                    </TableCell>
-                                    {/* Catégorie */}
-                                    <TableCell className="text-[var(--admin-muted-2)] text-sm">
-                                        {item.category ?? "—"}
-                                    </TableCell>
-                                    {/* Prix */}
-                                    <TableCell className="text-white text-sm font-mono">
-                                        {item.price.toFixed(2)} €
-                                    </TableCell>
-                                    {/* Statut */}
-                                    <TableCell>
-                                        <span
-                                            style={{
-                                                color: STATUS_COLOR[item.status],
-                                                background: STATUS_COLOR[item.status] + "20",
-                                                borderColor: STATUS_COLOR[item.status] + "40",
-                                            }}
-                                            className="inline-block text-xs font-mono px-2 py-0.5 rounded border"
-                                        >
-                                            {STATUS_LABEL[item.status]}
-                                        </span>
-                                    </TableCell>
-                                    {/* Tags */}
-                                    <TableCell className="text-[var(--admin-muted-2)] text-xs font-mono">
-                                        {item.tags ?? "—"}
-                                    </TableCell>
-                                    {/* Actions */}
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => openEdit(item)}
-                                                className="text-[var(--admin-muted)] hover:text-white transition-colors"
-                                                title="Modifier"
-                                            >
-                                                <Pencil size={13} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(item)}
-                                                className="text-[var(--admin-muted)] hover:text-red-400 transition-colors"
-                                                title="Supprimer"
-                                            >
-                                                <Trash2 size={13} />
-                                            </button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
                     </TableBody>
                 </Table>
             </div>
@@ -353,25 +350,29 @@ export default function AdminCataloguePage() {
                             </label>
                             <div className="flex items-center gap-3">
                                 {form.image_url ? (
-                                    <div className="w-20 h-20 rounded overflow-hidden relative shrink-0">
-                                        <Image
+                                    <div className="w-20 h-20 rounded overflow-hidden shrink-0">
+                                        <img
                                             src={
                                                 form.image_url.startsWith("/")
                                                     ? `${API_URL}${form.image_url}`
                                                     : form.image_url
                                             }
                                             alt="Aperçu"
-                                            fill
-                                            className="object-cover"
-                                            unoptimized
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                                            }}
                                         />
                                     </div>
                                 ) : (
                                     <div
-                                        style={{ border: "1px solid var(--admin-border)" }}
-                                        className="w-20 h-20 rounded flex items-center justify-center shrink-0"
+                                        style={{ border: "1px dashed var(--admin-border)" }}
+                                        className="w-20 h-20 rounded flex flex-col items-center justify-center shrink-0 gap-1"
                                     >
-                                        <ImageIcon size={24} className="text-[var(--admin-muted)]" />
+                                        <ImageIcon size={20} className="text-[var(--admin-muted)]" />
+                                        <span className="text-[9px] text-[var(--admin-muted)] uppercase tracking-wide">
+                                            Aucune image
+                                        </span>
                                     </div>
                                 )}
                                 <div className="flex-1 space-y-2">
