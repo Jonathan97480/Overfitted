@@ -714,6 +714,14 @@ class InvoiceItemSchema(BaseModel):
     unit_price_ht: float
 
 
+class AddressSchema(BaseModel):
+    line1: str
+    line2: str | None = None
+    city: str
+    postal_code: str
+    country: str = "France"
+
+
 class InvoiceOut(BaseModel):
     id: int
     order_id: int
@@ -721,6 +729,8 @@ class InvoiceOut(BaseModel):
     issued_at: datetime
     user_email: str
     user_name: str
+    billing_address: str | None
+    shipping_address: str | None
     items_json: str
     amount_ht: float
     tva_rate: float
@@ -735,6 +745,8 @@ class InvoiceCreate(BaseModel):
     order_id: int
     user_email: str
     user_name: str
+    billing_address: AddressSchema | None = None
+    shipping_address: AddressSchema | None = None
     items: list[InvoiceItemSchema]
     tva_rate: float = 0.20
     promo_code: str | None = None
@@ -804,6 +816,8 @@ async def create_invoice(body: InvoiceCreate, db: DBDep):
         invoice_number=invoice_number,
         user_email=body.user_email,
         user_name=body.user_name,
+        billing_address=json.dumps(body.billing_address.model_dump(), ensure_ascii=False) if body.billing_address else None,
+        shipping_address=json.dumps(body.shipping_address.model_dump(), ensure_ascii=False) if body.shipping_address else None,
         items_json=json.dumps([i.model_dump() for i in body.items], ensure_ascii=False),
         amount_ht=amount_ht,
         tva_rate=body.tva_rate,
@@ -854,6 +868,53 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
     story.append(Paragraph("OVERFITTED.IO", title_style))
     story.append(Paragraph("Design lab — produits uniques print-on-demand", small_style))
     story.append(Spacer(1, 0.3*cm))
+
+    # Adresses
+    def _fmt_addr(raw):
+        if not raw:
+            return ""
+        try:
+            import json as _j
+            d = _j.loads(raw)
+            parts = [d.get("line1", "")]
+            if d.get("line2"):
+                parts.append(d["line2"])
+            parts.append((d.get("postal_code", "") + " " + d.get("city", "")).strip())
+            parts.append(d.get("country", ""))
+            return "\n".join(p for p in parts if p)
+        except Exception:
+            return raw
+
+    billing_str = _fmt_addr(inv.billing_address)
+    shipping_str = _fmt_addr(inv.shipping_address)
+    same_address = not shipping_str or billing_str == shipping_str
+
+    if billing_str or shipping_str:
+        addr_style = ParagraphStyle("addr", parent=styles["Normal"], fontSize=9, leading=14)
+        addr_grey_style = ParagraphStyle("addr_grey", parent=styles["Normal"], fontSize=9, leading=14, textColor=colors.grey)
+        billing_lines = "<br/>".join(billing_str.split("\n")) if billing_str else "&#8212;"
+        addr_left = Paragraph(
+            "<b>Adresse de facturation</b><br/>" + billing_lines,
+            addr_style
+        )
+        if same_address:
+            addr_right = Paragraph(
+                "<b>Adresse de livraison</b><br/><i>Identique a l'adresse de facturation</i>",
+                addr_grey_style
+            )
+        else:
+            shipping_lines = "<br/>".join(shipping_str.split("\n"))
+            addr_right = Paragraph(
+                "<b>Adresse de livraison</b><br/>" + shipping_lines,
+                addr_style
+            )
+        addr_table = Table([[addr_left, addr_right]], colWidths=[8*cm, 8*cm])
+        addr_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(addr_table)
+        story.append(Spacer(1, 0.4*cm))
 
     # Infos facture
     issued = inv.issued_at.strftime("%d/%m/%Y") if inv.issued_at else ""

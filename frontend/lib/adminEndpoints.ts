@@ -102,6 +102,14 @@ export interface InvoiceItemSchema {
     unit_price_ht: number;
 }
 
+export interface AddressSchema {
+    line1: string;
+    line2?: string | null;
+    city: string;
+    postal_code: string;
+    country?: string;
+}
+
 export interface InvoiceOut {
     id: number;
     order_id: number;
@@ -109,6 +117,8 @@ export interface InvoiceOut {
     issued_at: string;
     user_email: string;
     user_name: string;
+    billing_address: string | null;
+    shipping_address: string | null;
     items_json: string;
     amount_ht: number;
     tva_rate: number;
@@ -122,6 +132,8 @@ export interface InvoiceCreate {
     order_id: number;
     user_email: string;
     user_name: string;
+    billing_address?: AddressSchema | null;
+    shipping_address?: AddressSchema | null;
     items: InvoiceItemSchema[];
     tva_rate?: number;
     promo_code?: string | null;

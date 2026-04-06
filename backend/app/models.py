@@ -114,6 +114,10 @@ class Invoice(Base):
     issued_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     user_email = Column(String, nullable=False)
     user_name = Column(String, nullable=False)
+    # Adresse de facturation (JSON sérialisé)
+    billing_address = Column(String, nullable=True)
+    # Adresse de livraison (JSON sérialisé) — None = identique à la facturation
+    shipping_address = Column(String, nullable=True)
     items_json = Column(String, nullable=False)  # JSON array sérialisé
     amount_ht = Column(Float, nullable=False)
     tva_rate = Column(Float, default=0.20, nullable=False)

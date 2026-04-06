@@ -1,13 +1,14 @@
 "use client";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Search, Plus, Loader2, X } from "lucide-react";
+import { FileText, Download, Search, Plus, Loader2, X, ExternalLink } from "lucide-react";
 import {
     useListInvoicesQuery,
     useCreateInvoiceMutation,
     type InvoiceOut,
     type InvoiceCreate,
     type InvoiceItemSchema,
+    type AddressSchema,
 } from "@/lib/adminEndpoints";
 
 const NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -20,21 +21,29 @@ function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString("fr-FR");
 }
 
-function downloadPdf(invoice: InvoiceOut, token: string) {
+async function fetchPdfBlob(invoice: InvoiceOut, token: string): Promise<string> {
     const url = `${NEXT_PUBLIC_API_URL}/api/admin/invoices/${invoice.id}/pdf`;
-    const a = document.createElement("a");
-    a.href = url;
-    // Passe le token via Authorization header nécessite fetch — on ouvre dans un onglet via window.location + query token workaround
-    // Solution propre : utiliser fetch + blob
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.blob())
-        .then((blob) => {
-            const blobUrl = URL.createObjectURL(blob);
-            a.href = blobUrl;
-            a.download = `${invoice.invoice_number}.pdf`;
-            a.click();
-            URL.revokeObjectURL(blobUrl);
-        });
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await r.blob();
+    return URL.createObjectURL(blob);
+}
+
+function openPdf(invoice: InvoiceOut, token: string) {
+    fetchPdfBlob(invoice, token).then((blobUrl) => {
+        window.open(blobUrl, "_blank");
+        // Révoquer après 60s pour libérer la mémoire
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    });
+}
+
+function downloadPdf(invoice: InvoiceOut, token: string) {
+    fetchPdfBlob(invoice, token).then((blobUrl) => {
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `${invoice.invoice_number}.pdf`;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+    });
 }
 
 function getToken(): string {
@@ -68,6 +77,10 @@ function CreateInvoiceDialog({
     const [items, setItems] = useState<InvoiceItemSchema[]>([
         { description: "", quantity: 1, unit_price_ht: 0 },
     ]);
+    const emptyAddress = (): AddressSchema => ({ line1: "", line2: "", city: "", postal_code: "", country: "France" });
+    const [billingAddr, setBillingAddr] = useState<AddressSchema>(emptyAddress());
+    const [shippingAddr, setShippingAddr] = useState<AddressSchema>(emptyAddress());
+    const [sameAddress, setSameAddress] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     function addItem() {
@@ -84,12 +97,12 @@ function CreateInvoiceDialog({
                 idx !== i
                     ? item
                     : {
-                          ...item,
-                          [field]:
-                              field === "description"
-                                  ? value
-                                  : parseFloat(value) || 0,
-                      }
+                        ...item,
+                        [field]:
+                            field === "description"
+                                ? value
+                                : parseFloat(value) || 0,
+                    }
             )
         );
     }
@@ -109,6 +122,8 @@ function CreateInvoiceDialog({
             order_id: parseInt(form.order_id),
             user_email: form.user_email,
             user_name: form.user_name,
+            billing_address: billingAddr.line1 ? billingAddr : null,
+            shipping_address: !sameAddress && shippingAddr.line1 ? shippingAddr : null,
             items,
             tva_rate: parseFloat(form.tva_rate),
             promo_code: form.promo_code || null,
@@ -246,6 +261,57 @@ function CreateInvoiceDialog({
                                 style={inputStyle}
                             />
                         </div>
+                    </div>
+
+                    {/* Adresse de facturation */}
+                    <div>
+                        <p className="text-xs font-semibold text-[var(--admin-muted-2)] mb-2">
+                            Adresse de facturation
+                        </p>
+                        <div className="space-y-2">
+                            {(["line1", "line2", "city", "postal_code", "country"] as (keyof AddressSchema)[]).map((k) => (
+                                <input
+                                    key={k}
+                                    className={inputCls}
+                                    style={inputStyle}
+                                    placeholder={{ line1: "Rue *", line2: "Complément", city: "Ville *", postal_code: "Code postal *", country: "Pays" }[k]}
+                                    value={billingAddr[k] ?? ""}
+                                    onChange={(e) => setBillingAddr((a) => ({ ...a, [k]: e.target.value }))}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Adresse de livraison */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <p className="text-xs font-semibold text-[var(--admin-muted-2)]">
+                                Adresse de livraison
+                            </p>
+                            <label className="flex items-center gap-1.5 text-xs text-[var(--admin-muted-2)] cursor-pointer ml-auto">
+                                <input
+                                    type="checkbox"
+                                    checked={sameAddress}
+                                    onChange={(e) => setSameAddress(e.target.checked)}
+                                    className="accent-[var(--admin-accent)]"
+                                />
+                                Identique à la facturation
+                            </label>
+                        </div>
+                        {!sameAddress && (
+                            <div className="space-y-2">
+                                {(["line1", "line2", "city", "postal_code", "country"] as (keyof AddressSchema)[]).map((k) => (
+                                    <input
+                                        key={k}
+                                        className={inputCls}
+                                        style={inputStyle}
+                                        placeholder={{ line1: "Rue *", line2: "Complément", city: "Ville *", postal_code: "Code postal *", country: "Pays" }[k]}
+                                        value={shippingAddr[k] ?? ""}
+                                        onChange={(e) => setShippingAddr((a) => ({ ...a, [k]: e.target.value }))}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Articles */}
@@ -482,8 +548,9 @@ export default function AdminInvoicesPage() {
                                     {invoices.map((inv) => (
                                         <tr
                                             key={inv.id}
-                                            style={{ borderBottom: "1px solid var(--admin-border)" }}
+                                            style={{ borderBottom: "1px solid var(--admin-border)", cursor: "pointer" }}
                                             className="hover:bg-white/5 transition-colors"
+                                            onClick={() => openPdf(inv, getToken())}
                                         >
                                             <td className="px-4 py-3 font-mono text-[var(--admin-accent)] text-xs whitespace-nowrap">
                                                 {inv.invoice_number}
@@ -510,16 +577,22 @@ export default function AdminInvoicesPage() {
                                                 {fmt(inv.amount_ttc)}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <button
-                                                    onClick={() =>
-                                                        downloadPdf(inv, getToken())
-                                                    }
-                                                    title="Télécharger PDF"
-                                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--admin-muted-2)] border border-[var(--admin-border)] hover:text-white hover:border-white/30 transition"
-                                                >
-                                                    <Download size={11} />
-                                                    PDF
-                                                </button>
+                                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        onClick={() => openPdf(inv, getToken())}
+                                                        title="Ouvrir le PDF"
+                                                        className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--admin-muted-2)] border border-[var(--admin-border)] hover:text-white hover:border-white/30 transition"
+                                                    >
+                                                        <ExternalLink size={11} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => downloadPdf(inv, getToken())}
+                                                        title="Télécharger PDF"
+                                                        className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--admin-muted-2)] border border-[var(--admin-border)] hover:text-white hover:border-white/30 transition"
+                                                    >
+                                                        <Download size={11} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
