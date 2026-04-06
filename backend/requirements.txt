@@ -48,6 +48,8 @@ PyJWT==2.12.1
 pydantic[email]
 bcrypt
 reportlab==4.2.5
+rembg==2.0.69
+onnxruntime==1.23.2
 # rembg et vtracer sont installés via Dockerfile (nécessitent Rust toolchain + ONNX runtime)
 # Décommenter pour dev local si la toolchain Rust est disponible :
 rembg

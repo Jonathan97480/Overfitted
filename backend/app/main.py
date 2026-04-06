@@ -16,6 +16,7 @@ from app.services.soul_o_meter.router import router as soul_router
 from app.services.commerce.router import router as commerce_router
 from app.services.admin_api.router import router as admin_router
 from app.services.auth.router import router as auth_router
+from app.services.printful.router import router as printful_router
 from app.middleware.analytics import AnalyticsMiddleware
 
 load_dotenv()
@@ -25,14 +26,12 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./db.sqlite3")
 
 app = FastAPI(title="Overfitted.io API", description="Backend satirique Print-on-Demand", version="0.1.0")
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Ordre critique : add_middleware insère en tête de liste, reversed() à la construction.
+# Le DERNIER appel add_middleware devient le middleware OUTERMOST (traite en premier les requêtes).
+# CORS doit être outermost pour garantir les headers même en cas d'erreur dans les middlewares internes.
+
+# --- Analytics (innermost des trois — ajouté en premier) ---
+app.add_middleware(AnalyticsMiddleware)
 
 # --- Session (requis pour SQLAdmin auth) ---
 app.add_middleware(
@@ -43,8 +42,14 @@ app.add_middleware(
     same_site="lax",
 )
 
-# --- Analytics (Redis, transparent si absent) ---
-app.add_middleware(AnalyticsMiddleware)
+# --- CORS (outermost — ajouté en dernier, traite TOUTES les réponses) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # --- DB Dependency ---
@@ -79,6 +84,7 @@ app.include_router(soul_router)
 app.include_router(commerce_router)
 app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(printful_router)
 
 # --- Fichiers statiques (images catalogue, etc.) ---
 _static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
@@ -89,11 +95,19 @@ app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Garantit que les 500 non gérés renvoient bien une JSON response
-    (le CORSMiddleware de Starlette ne couvre pas les exceptions qui ne
-    produisent pas de réponse ASGI, ce qui bloque les headers CORS)."""
+    avec les headers CORS (le CORSMiddleware de Starlette ne couvre pas
+    les exceptions qui remontent hors de la chaîne ASGI)."""
+    origin = request.headers.get("origin", "")
+    allowed_origin = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    cors_origin = origin if origin == allowed_origin else ""
+    headers = {}
+    if cors_origin:
+        headers["Access-Control-Allow-Origin"] = cors_origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
         content={"detail": "Erreur interne du serveur."},
+        headers=headers,
     )
 
 

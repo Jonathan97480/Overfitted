@@ -50,7 +50,9 @@ export function ApiKeyField({
                     />
                 )}
             </label>
-            <div
+            <form
+                autoComplete="off"
+                onSubmit={(e) => e.preventDefault()}
                 className="flex items-center gap-1 rounded-md px-2"
                 style={{
                     background: "var(--admin-sidebar)",
@@ -63,7 +65,7 @@ export function ApiKeyField({
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={ph}
                     className="flex-1 py-2 text-sm font-mono bg-transparent outline-none text-white placeholder:text-[var(--admin-muted)]"
-                    autoComplete="off"
+                    autoComplete="new-password"
                     spellCheck={false}
                 />
                 {type === "password" && (
@@ -84,7 +86,7 @@ export function ApiKeyField({
                 >
                     {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
                 </button>
-            </div>
+            </form>
         </div>
     );
 }

@@ -791,6 +791,33 @@ class GenerateMockupRequest(BaseModel):
     position_left: int = 0        # Déport horizontal depuis la gauche de la zone
 
 
+@router.get("/catalog/mockup-templates/{product_id}", dependencies=[Depends(verify_admin_token)])
+async def get_mockup_templates_route(product_id: int, db: DBDep) -> dict:
+    """Retourne les templates Printful pour un produit : background_url, print_area_width/height, etc.
+    Utilisé par le frontend pour afficher le bon fond + dimensions d'impression réelles.
+    """
+    from app.services.printful.client import (
+        get_mockup_templates,
+        resolve_api_key,
+        resolve_store_id,
+    )
+
+    try:
+        api_key = await resolve_api_key(db)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    store_id = await resolve_store_id(api_key, db)
+
+    try:
+        result = await get_mockup_templates(api_key, product_id, store_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
+
+    templates = result.get("result", {}).get("templates", [])
+    return {"templates": templates}
+
+
 @router.post("/catalog/generate-mockup", dependencies=[Depends(verify_admin_token)])
 async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
     """Génère un aperçu haute résolution via Printful Mockup Generator.
@@ -824,18 +851,49 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
             public_base,
             design_url,
         )
+        # Cas où l'URL est déjà avec 127.0.0.1
+        design_url = _re.sub(
+            r"https?://127\.0\.0\.1(:\d+)?",
+            public_base,
+            design_url,
+        )
+
+    import logging as _logging
+    _logging.getLogger(__name__).info(f"[generate_mockup] design_url envoyée à Printful: {design_url}")
+
+    # Vérification de sécurité — l'URL doit être absolue et non localhost
+    if not design_url.startswith("http"):
+        raise HTTPException(status_code=400, detail=f"URL du design invalide (non absolue) : {design_url}")
+    if "localhost" in design_url or "127.0.0.1" in design_url:
+        raise HTTPException(status_code=400, detail="PUBLIC_BASE_URL n'est pas configuré — Printful ne peut pas accéder à localhost. Ajoutez PUBLIC_BASE_URL dans le .env backend.")
 
     # Construire la position optionnelle
     position: dict | None = None
     if body.design_width:
+        # Clamping de sécurité : le design ne doit pas déborder de l'area
+        safe_w = min(body.design_width, body.area_width)
+        safe_h = min(body.design_height or safe_w, body.area_height)
+        safe_left = max(0, min(body.position_left, body.area_width - safe_w))
+        safe_top = max(0, min(body.position_top, body.area_height - safe_h))
         position = {
             "area_width": body.area_width,
             "area_height": body.area_height,
-            "width": body.design_width,
-            "height": body.design_height or body.design_width,
-            "top": body.position_top,
-            "left": body.position_left,
+            "width": safe_w,
+            "height": safe_h,
+            "top": safe_top,
+            "left": safe_left,
         }
+        _logging.getLogger(__name__).info(
+            f"[generate_mockup] position envoyée à Printful: {position}"
+        )
+
+    _logging.getLogger(__name__).info(
+        f"[generate_mockup] payload → product={body.printful_catalog_product_id} "
+        f"variant={body.variant_id} placement={body.placement} "
+        f"area={body.area_width}x{body.area_height} "
+        + (f"design={position['width']}x{position['height']} "
+           f"top={position['top']} left={position['left']}" if position else "position=default")
+    )
 
     try:
         task_resp = await create_mockup_task(
@@ -848,6 +906,7 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
             store_id=store_id,
         )
     except ValueError as exc:
+        _logging.getLogger(__name__).error(f"[generate_mockup] Erreur Printful create-task: {exc}")
         raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
 
     task_key = task_resp.get("result", {}).get("task_key")
@@ -873,7 +932,19 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
                 )
             break
         elif task_status == "failed":
-            raise HTTPException(status_code=502, detail="Printful a échoué à générer le mockup.")
+            raw_result = result.get("result", {})
+            pf_error = (
+                raw_result.get("error")
+                or result.get("error")
+                or raw_result
+            )
+            _logging.getLogger(__name__).error(
+                f"[generate_mockup] Printful task failed: {pf_error} | full={result}"
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Printful a échoué à générer le mockup : {pf_error}"
+            )
 
     if not mockup_url:
         raise HTTPException(status_code=504, detail="Timeout : la génération du mockup a pris trop de temps.")
@@ -1046,6 +1117,7 @@ async def process_catalogue_image(
         check_print_ready,
         upscale_to_print,
         remove_background,
+        autocrop_transparent,
         vectorize_to_svg,
         REMBG_AVAILABLE,
         VTRACER_AVAILABLE,
@@ -1069,6 +1141,18 @@ async def process_catalogue_image(
             )
         content = await _asyncio.to_thread(remove_background, content)
         bg_removed = True
+
+    # 1b — Autocrop : rogner les marges transparentes après suppression de fond
+    # (après remove_bg car rembg peut laisser de larges zones vides en bordure)
+    if bg_removed:
+        def _autocrop(raw: bytes) -> bytes:
+            from PIL import Image as _Image
+            img_tmp = _Image.open(_io.BytesIO(raw)).convert("RGBA")
+            cropped = autocrop_transparent(img_tmp)
+            buf = _io.BytesIO()
+            cropped.save(buf, format="PNG")
+            return buf.getvalue()
+        content = await _asyncio.to_thread(_autocrop, content)
 
     # 2 — Validation image
     try:

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
     useListProductsQuery,
     useCreateProductMutation,
@@ -9,7 +9,9 @@ import {
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
     useGenerateMockupMutation,
+    useGetMockupTemplatesQuery,
     useListCatalogueQuery,
+    type PrintfulTemplate,
     type ProductOut,
     type CatalogueItemOut,
     type ImageProcessResult,
@@ -309,21 +311,87 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
     const [pos, setPos] = useState<MPos>({ placement: "front", scalePct: 80, xOffsetPct: 50, yOffsetPct: 38 });
     const [mockupPreview, setMockupPreview] = useState<string | null>(form.mockup_url ?? null);
     const [genError, setGenError] = useState<string | null>(null);
+    // Ratio naturel du design (h/w) pour éviter déformation dans Printful
+    const [imgRatio, setImgRatio] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!form.image_url) { setImgRatio(null); return; }
+        const img = new window.Image();
+        img.onload = () => { if (img.naturalWidth > 0) setImgRatio(img.naturalHeight / img.naturalWidth); };
+        img.onerror = () => setImgRatio(1);
+        img.src = form.image_url;
+    }, [form.image_url]);
+
+    // Ratio effectif (fallback 1 si image pas encore chargée — n'arrive pas en pratique
+    // car le bouton Generate est disabled tant que imgRatio est null)
+    const effectiveRatio = imgRatio ?? 1;
 
     const selectedProduct = products?.find((p) => p.id === selectedId);
-    const CANVAS_W = 220, CANVAS_H = 300;
-    const dSize = pos.scalePct / 100 * CANVAS_W;
-    const dLeft = pos.xOffsetPct / 100 * CANVAS_W - dSize / 2;
-    const dTop = pos.yOffsetPct / 100 * CANVAS_H - dSize / 2;
+    const catalogProductId = selectedProduct?.printful_catalog_product_id ?? null;
+
+    // Templates Printful pour le produit sélectionné
+    const { data: tplData } = useGetMockupTemplatesQuery(catalogProductId!, {
+        skip: catalogProductId == null,
+    });
+
+    // Template correspondant au placement choisi (ou is_default)
+    const activeTpl: PrintfulTemplate | undefined = useMemo(() => {
+        if (!tplData?.templates?.length) return undefined;
+        return (
+            tplData.templates.find((t) => t.placement === pos.placement) ??
+            tplData.templates.find((t) => t.is_default) ??
+            tplData.templates[0]
+        );
+    }, [tplData, pos.placement]);
+
+    // Dimensions canvas: largeur fixe 240, hauteur basée sur le template
+    const CANVAS_W = 240;
+
+    // Dimensions réelles pour Printful (print_area_width/height ou fallback)
+    const AREA_W = activeTpl?.print_area_width ?? 1800;
+    const AREA_H = activeTpl?.print_area_height ?? 2400;
+
+    // Zone d'impression en coordonnées canvas
+    // paLeft/paTop : depuis les coordonnées template de Printful
+    const paLeft = activeTpl ? activeTpl.print_area_left / activeTpl.template_width * CANVAS_W : 12;
+    const templateH_canvas = activeTpl
+        ? Math.round(CANVAS_W * activeTpl.template_height / activeTpl.template_width)
+        : 310;
+    const paTop = activeTpl ? activeTpl.print_area_top / activeTpl.template_height * templateH_canvas : 12;
+    // paW symétrique depuis la marge gauche
+    const paW = CANVAS_W - paLeft * 2;
+    // paH CALÉ SUR LE RATIO RÉEL AREA_W:AREA_H — c'est la clé de la calibration
+    // Garantit que scalePct=X% produit exactement la même taille relative en canvas et chez Printful
+    const paH = AREA_W > 0 ? paW * AREA_H / AREA_W : paW * 4 / 3;
+    // Canvas height = max(template proportionnel, zone impression + marges haut/bas)
+    const CANVAS_H = Math.max(templateH_canvas, Math.round(paTop + paH + paTop));
+
+    // 100% = design tient entièrement dans la zone (contrainte par la plus petite dimension)
+    // Portrait (ratio > W/H) → contraint en hauteur ; Paysage → contraint en largeur
+    const areaAspect = AREA_H > 0 ? AREA_W / AREA_H : 1;
+    const maxDW_area = effectiveRatio > areaAspect
+        ? Math.floor(AREA_H / effectiveRatio)   // portrait : hauteur est la contrainte
+        : AREA_W;                                // paysage : largeur est la contrainte
+
+    // Canvas preview : maxDW_canvas = maxDW_area ramené à l'échelle du canvas
+    // Puisque paW/paH = AREA_W/AREA_H (même ratio), la proportion est exactement la même
+    const maxDW_canvas = maxDW_area * (paW / AREA_W);
+
+    // Design overlay dans le canvas
+    const dW_canvas = pos.scalePct / 100 * maxDW_canvas;
+    const dH_canvas = dW_canvas * effectiveRatio;
+    const dLeft = paLeft + pos.xOffsetPct / 100 * paW - dW_canvas / 2;
+    const dTop = paTop + pos.yOffsetPct / 100 * paH - dH_canvas / 2;
 
     const handleGenerate = async () => {
-        if (!selectedProduct?.printful_catalog_product_id || !form.image_url) return;
+        if (!selectedProduct?.printful_catalog_product_id || !form.image_url || imgRatio === null) return;
         setGenError(null);
-        const AREA_W = 1800, AREA_H = 2400;
-        const dW = Math.round(pos.scalePct / 100 * AREA_W);
-        const dH = dW;
-        const posLeft = Math.max(0, Math.round(pos.xOffsetPct / 100 * AREA_W - dW / 2));
-        const posTop = Math.max(0, Math.round(pos.yOffsetPct / 100 * AREA_H - dH / 2));
+        // dW/dH contraints dans l'area (ne débordent jamais)
+        const dW = Math.min(AREA_W, Math.round(pos.scalePct / 100 * maxDW_area));
+        const dH = Math.min(AREA_H, Math.round(dW * effectiveRatio));
+        // Position : centrée sur xOffset/yOffset, clampe pour ne pas sortir de l'area
+        const posLeft = Math.max(0, Math.min(AREA_W - dW, Math.round(pos.xOffsetPct / 100 * AREA_W - dW / 2)));
+        const posTop = Math.max(0, Math.min(AREA_H - dH, Math.round(pos.yOffsetPct / 100 * AREA_H - dH / 2)));
         try {
             const res = await generateMockup({
                 printful_catalog_product_id: selectedProduct.printful_catalog_product_id,
@@ -380,21 +448,34 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
                 {/* Canvas de positionnement */}
                 <div className="relative flex-shrink-0 rounded overflow-hidden"
                     style={{ width: CANVAS_W, height: CANVAS_H, background: "var(--admin-card)", border: "1px solid var(--admin-border)" }}>
-                    {selectedProduct?.image_url && (
+                    {/* Template Printful comme fond (background_url = produit vierge) */}
+                    {activeTpl?.background_url ? (
+                        <img src={activeTpl.background_url} alt="" className="w-full h-full object-contain" />
+                    ) : selectedProduct?.image_url ? (
                         <img src={selectedProduct.image_url} alt="" className="w-full h-full object-contain" />
-                    )}
-                    {!selectedProduct && (
+                    ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs text-center px-2" style={{ color: "var(--admin-muted-2)" }}>
                             Choisir un produit pour voir l'aperçu
                         </div>
                     )}
+                    {/* Design de l'utilisateur */}
                     {form.image_url && (
                         <img src={form.image_url} alt="design" className="absolute pointer-events-none"
-                            style={{ width: dSize, height: dSize, left: dLeft, top: dTop, objectFit: "contain", opacity: 0.85 }} />
+                            style={{ width: dW_canvas, height: dH_canvas, left: dLeft, top: dTop, objectFit: "contain", opacity: 0.85 }} />
                     )}
-                    {/* Indicateur de zone impression */}
-                    <div className="absolute inset-0 border-2 border-dashed pointer-events-none"
-                        style={{ borderColor: "rgba(255,107,0,0.25)", margin: "12px" }} />
+                    {/* Zone d'impression */}
+                    <div className="absolute pointer-events-none border-2 border-dashed"
+                        style={{
+                            left: paLeft, top: paTop, width: paW, height: paH,
+                            borderColor: activeTpl ? "rgba(255,107,0,0.4)" : "rgba(255,107,0,0.2)",
+                        }} />
+                    {/* Badge dimensions réelles */}
+                    {activeTpl && (
+                        <div className="absolute bottom-1 right-1 text-[9px] px-1 rounded"
+                            style={{ background: "rgba(0,0,0,0.6)", color: "var(--admin-accent)" }}>
+                            {AREA_W}×{AREA_H}px
+                        </div>
+                    )}
                 </div>
 
                 {/* Contrôles */}
@@ -411,7 +492,7 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
                         </Select>
                     </div>
                     {[
-                        { label: `Taille : ${pos.scalePct}%`, key: "scalePct" as const, min: 10, max: 150 },
+                        { label: `Taille : ${pos.scalePct}%`, key: "scalePct" as const, min: 10, max: 100 },
                         { label: `Position X : ${pos.xOffsetPct}%`, key: "xOffsetPct" as const, min: 0, max: 100 },
                         { label: `Position Y : ${pos.yOffsetPct}%`, key: "yOffsetPct" as const, min: 0, max: 100 },
                     ].map(({ label, key, min, max }) => (
@@ -428,11 +509,11 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
 
             <div className="space-y-2">
                 <Button
-                    disabled={!selectedProduct?.printful_catalog_product_id || !form.image_url || isGenerating}
+                    disabled={!selectedProduct?.printful_catalog_product_id || !form.image_url || isGenerating || imgRatio === null}
                     onClick={handleGenerate}
                     size="sm"
-                    style={{ background: isGenerating ? "var(--admin-border)" : "var(--admin-accent)", color: "white" }}>
-                    {isGenerating ? "Génération en cours…" : "Générer l'aperçu Printful ↗"}
+                    style={{ background: isGenerating || imgRatio === null ? "var(--admin-border)" : "var(--admin-accent)", color: "white" }}>
+                    {isGenerating ? "Génération en cours…" : imgRatio === null ? "Chargement image…" : "Générer l'aperçu Printful ↗"}
                 </Button>
                 {genError && <p className="text-xs text-red-400">{genError}</p>}
                 {!selectedProduct?.printful_catalog_product_id && selectedId && (

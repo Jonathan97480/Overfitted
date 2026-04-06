@@ -47,6 +47,7 @@ const SECTIONS: SectionDef[] = [
         testService: "printful",
         fields: [
             { key: "PRINTFUL_API_KEY", label: "API Key", type: "password" },
+            { key: "PRINTFUL_STORE_ID", label: "Store ID", type: "text", placeholder: "Ex: 12345678 — visible dans votre dashboard Printful" },
         ],
     },
     {

@@ -216,6 +216,29 @@ async def get_shipping_rates(
 # Mockup Generator (async task flow)
 # ---------------------------------------------------------------------------
 
+async def get_mockup_templates(
+    api_key: str,
+    product_id: int | str,
+    store_id: int | None = None,
+) -> dict[str, Any]:
+    """GET /mockup-generator/templates/{product_id} — templates de positionnement.
+
+    Retourne la liste des templates par placement avec :
+    - background_url   : image fond du produit (t-shirt sans design)
+    - template_width / template_height : dimensions de l'image template
+    - print_area_width / print_area_height : dimensions à utiliser dans create-task
+    - print_area_top / print_area_left : offset de la zone d'impression dans le template
+    - is_default       : template par défaut pour ce placement
+    """
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(
+            f"{PRINTFUL_BASE_URL}/mockup-generator/templates/{product_id}",
+            headers=_store_header(api_key, store_id),
+        )
+    _raise_for_printful(resp)
+    return resp.json()
+
+
 async def create_mockup_task(
     api_key: str,
     product_id: int | str,

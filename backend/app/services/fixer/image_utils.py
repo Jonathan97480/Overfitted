@@ -132,6 +132,85 @@ def remove_background(image_bytes: bytes) -> bytes:
         return result_bytes
 
 
+def autocrop_transparent(img: Image.Image, padding: int = 4) -> Image.Image:
+    """Rogne les marges entièrement transparentes autour du sujet.
+
+    Fonctionne uniquement sur les images RGBA. Retourne l'image originale
+    inchangée si elle n'a pas de canal alpha ou si le contenu est vide.
+    padding : pixels de marge conservés autour du sujet (default 4).
+    """
+    if img.mode != "RGBA":
+        return img
+    try:
+        import numpy as _np
+        rgba = _np.array(img)
+        alpha = rgba[:, :, 3]
+        rows = _np.any(alpha > 0, axis=1)
+        cols = _np.any(alpha > 0, axis=0)
+        if not rows.any() or not cols.any():
+            return img  # image entierement transparente — rien a rogner
+        r_min, r_max = int(_np.argmax(rows)), int(len(rows) - 1 - _np.argmax(rows[::-1]))
+        c_min, c_max = int(_np.argmax(cols)), int(len(cols) - 1 - _np.argmax(cols[::-1]))
+        # Ajouter le padding sans depasser les dimensions
+        r_min = max(0, r_min - padding)
+        r_max = min(img.height - 1, r_max + padding)
+        c_min = max(0, c_min - padding)
+        c_max = min(img.width - 1, c_max + padding)
+        return img.crop((c_min, r_min, c_max + 1, r_max + 1))
+    except ImportError:
+        # Fallback sans numpy via getbbox PIL
+        bbox = img.split()[3].getbbox()  # bounding box du canal alpha
+        if bbox is None:
+            return img
+        pad = padding
+        bbox = (
+            max(0, bbox[0] - pad),
+            max(0, bbox[1] - pad),
+            min(img.width, bbox[2] + pad),
+            min(img.height, bbox[3] + pad),
+        )
+        return img.crop(bbox)
+
+
+def autocrop_transparent(img: Image.Image, padding: int = 4) -> Image.Image:
+    """Rogne les marges entièrement transparentes autour du sujet.
+
+    Fonctionne uniquement sur les images RGBA. Retourne l'image originale
+    inchangée si elle n'a pas de canal alpha ou si le contenu est vide.
+    padding : pixels de marge conservés autour du sujet (default 4).
+    """
+    if img.mode != "RGBA":
+        return img
+    try:
+        import numpy as _np
+        alpha = _np.array(img)[:, :, 3]
+        rows = _np.any(alpha > 0, axis=1)
+        cols = _np.any(alpha > 0, axis=0)
+        if not rows.any() or not cols.any():
+            return img  # image entièrement transparente — rien à rogner
+        r_min = int(_np.argmax(rows))
+        r_max = int(len(rows) - 1 - _np.argmax(rows[::-1]))
+        c_min = int(_np.argmax(cols))
+        c_max = int(len(cols) - 1 - _np.argmax(cols[::-1]))
+        r_min = max(0, r_min - padding)
+        r_max = min(img.height - 1, r_max + padding)
+        c_min = max(0, c_min - padding)
+        c_max = min(img.width - 1, c_max + padding)
+        return img.crop((c_min, r_min, c_max + 1, r_max + 1))
+    except ImportError:
+        # Fallback PIL getbbox sur le canal alpha
+        bbox = img.split()[3].getbbox()
+        if bbox is None:
+            return img
+        bbox = (
+            max(0, bbox[0] - padding),
+            max(0, bbox[1] - padding),
+            min(img.width, bbox[2] + padding),
+            min(img.height, bbox[3] + padding),
+        )
+        return img.crop(bbox)
+
+
 def vectorize_to_svg(image_bytes: bytes) -> str:
     """Vectorise une image en SVG via vtracer.
 

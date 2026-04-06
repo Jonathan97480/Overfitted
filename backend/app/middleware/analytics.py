@@ -84,7 +84,11 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
     """Middleware Starlette — enregistre les vues via Redis."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Ne jamais laisser l'analytics bloquer la réponse
+            raise
 
         # Uniquement les GET réussis
         if request.method != "GET" or response.status_code >= 400:
