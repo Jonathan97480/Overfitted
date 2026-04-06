@@ -15,6 +15,17 @@ export interface UserOut {
     email: string;
 }
 
+export interface UserStatsOut {
+    user_id: number;
+    username: string;
+    email: string;
+    designs_count: number;
+    orders_count: number;
+    orders_paid_count: number;
+    designs: { id: number; status: string; dpi: number | null; created_at: string }[];
+    orders: { id: number; status: string; design_id: number; stripe_session_id: string | null; created_at: string }[];
+}
+
 export interface DesignOut {
     id: number;
     user_id: number | null;
@@ -213,6 +224,10 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/users/${id}`, method: "DELETE" }),
             invalidatesTags: ["User", "Stats"],
         }),
+        getUserStats: build.query<UserStatsOut, number>({
+            query: (id) => `/users/${id}/stats`,
+            providesTags: ["User"],
+        }),
 
         // Designs
         listDesigns: build.query<DesignOut[], { skip?: number; limit?: number }>({
@@ -398,6 +413,7 @@ export const {
     useGetStatsQuery,
     useListUsersQuery,
     useDeleteUserMutation,
+    useGetUserStatsQuery,
     useListDesignsQuery,
     useGetDesignQuery,
     useUpdateDesignStatusMutation,

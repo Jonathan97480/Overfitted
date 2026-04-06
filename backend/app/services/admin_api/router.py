@@ -270,6 +270,65 @@ async def list_users(db: DBDep, skip: int = 0, limit: int = Query(50, le=200)):
     return result.scalars().all()
 
 
+class UserStatsOut(BaseModel):
+    user_id: int
+    username: str
+    email: str
+    designs_count: int
+    orders_count: int
+    orders_paid_count: int
+    designs: list[dict]
+    orders: list[dict]
+
+
+@router.get("/users/{user_id}/stats", response_model=UserStatsOut, dependencies=[Depends(verify_admin_token)])
+async def get_user_stats(user_id: int, db: DBDep):
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+
+    designs_rows = (await db.execute(
+        select(Design.id, Design.status, Design.dpi, Design.created_at)
+        .where(Design.user_id == user_id)
+        .order_by(Design.created_at.desc())
+        .limit(10)
+    )).all()
+
+    orders_rows = (await db.execute(
+        select(Order.id, Order.status, Order.design_id, Order.created_at, Order.stripe_session_id)
+        .where(Order.user_id == user_id)
+        .order_by(Order.created_at.desc())
+        .limit(10)
+    )).all()
+
+    paid_count = (
+        await db.execute(
+            select(func.count(Order.id))
+            .where(Order.user_id == user_id, Order.status == OrderStatus.paid)
+        )
+    ).scalar_one()
+
+    return UserStatsOut(
+        user_id=user.id,
+        username=user.username,
+        email=user.email,
+        designs_count=len(designs_rows),
+        orders_count=len(orders_rows),
+        orders_paid_count=paid_count,
+        designs=[
+            {"id": r.id, "status": r.status.value, "dpi": r.dpi,
+             "created_at": r.created_at.isoformat()}
+            for r in designs_rows
+        ],
+        orders=[
+            {"id": r.id, "status": r.status.value, "design_id": r.design_id,
+             "stripe_session_id": r.stripe_session_id,
+             "created_at": r.created_at.isoformat()}
+            for r in orders_rows
+        ],
+    )
+
+
 @router.delete("/users/{user_id}", dependencies=[Depends(verify_admin_token)])
 async def delete_user(user_id: int, db: DBDep):
     user = await db.get(User, user_id)

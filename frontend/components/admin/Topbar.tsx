@@ -12,15 +12,26 @@ const TITLES: Record<string, string> = {
     "/admin/promo": "Codes promo",
     "/admin/stats": "Statistiques",
     "/admin/settings": "Paramètres",
+    "/admin/catalogue": "Catalogue",
+    "/admin/invoices": "Factures",
 };
+
+function getTitle(pathname: string): string {
+    // Exact match first
+    if (TITLES[pathname]) return TITLES[pathname];
+    // Dynamic route: /admin/designs/[id]
+    const designsMatch = pathname.match(/^\/admin\/designs\/(\d+)$/);
+    if (designsMatch) return `Design #${designsMatch[1]}`;
+    // Fallback: longest prefix
+    const found = Object.entries(TITLES)
+        .reverse()
+        .find(([prefix]) => pathname.startsWith(prefix + "/"));
+    return found?.[1] ?? "Admin";
+}
 
 export function AdminTopbar() {
     const pathname = usePathname();
-    const title =
-        Object.entries(TITLES)
-            .reverse()
-            .find(([prefix]) => pathname === prefix || pathname.startsWith(prefix + "/"))?.[1] ??
-        "Admin";
+    const title = getTitle(pathname);
 
     return (
         <header
