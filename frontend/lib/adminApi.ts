@@ -12,6 +12,6 @@ export const adminApi = createApi({
             return headers;
         },
     }),
-    tagTypes: ["User", "Design", "Order", "Product", "Promo", "Stats"],
+    tagTypes: ["User", "Design", "Order", "Product", "Promo", "Stats", "Catalogue"],
     endpoints: () => ({}),
 });

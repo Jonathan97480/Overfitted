@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqladmin import Admin
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,13 +58,14 @@ async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(
 
 
 # Import et enregistrement des vues admin
-from app.admin import UserAdmin, DesignAdmin, OrderAdmin, ProductAdmin
+from app.admin import UserAdmin, DesignAdmin, OrderAdmin, ProductAdmin, CatalogueItemAdmin
 from app.auth import AdminAuth
 admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=os.getenv("SECRET_KEY", "overfitted-dev-secret")))
 admin.add_view(UserAdmin)
 admin.add_view(DesignAdmin)
 admin.add_view(OrderAdmin)
 admin.add_view(ProductAdmin)
+admin.add_view(CatalogueItemAdmin)
 
 
 app.include_router(fixer_router)
@@ -71,6 +73,11 @@ app.include_router(roast_router)
 app.include_router(soul_router)
 app.include_router(commerce_router)
 app.include_router(admin_router)
+
+# --- Fichiers statiques (images catalogue, etc.) ---
+_static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+os.makedirs(_static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 
 @app.exception_handler(Exception)

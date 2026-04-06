@@ -11,6 +11,7 @@ import {
     BarChart2,
     Settings,
     LogOut,
+    Store,
 } from "lucide-react";
 import { useAppDispatch } from "@/lib/hooks";
 import { clearToken } from "@/lib/adminAuthSlice";
@@ -18,9 +19,10 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/designs", label: "Designs", icon: ImageIcon },
+    { href: "/admin/catalogue", label: "Catalogue", icon: Store },
+    { href: "/admin/designs", label: "Designs users", icon: ImageIcon },
     { href: "/admin/orders", label: "Commandes", icon: ShoppingCart },
-    { href: "/admin/products", label: "Produits", icon: Package },
+    { href: "/admin/products", label: "Produits Printful", icon: Package },
     { href: "/admin/users", label: "Utilisateurs", icon: Users },
     { href: "/admin/promo", label: "Codes promo", icon: Tag },
     { href: "/admin/stats", label: "Statistiques", icon: BarChart2 },

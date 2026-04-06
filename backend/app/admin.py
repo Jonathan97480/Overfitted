@@ -1,5 +1,5 @@
 from sqladmin import ModelView
-from app.models import User, Design, Order, Product
+from app.models import User, Design, Order, Product, CatalogueItem
 
 
 class UserAdmin(ModelView, model=User):
@@ -16,3 +16,7 @@ class OrderAdmin(ModelView, model=Order):
 
 class ProductAdmin(ModelView, model=Product):
     column_list = [Product.id, Product.name, Product.price, Product.category, Product.printful_variant_id]
+
+
+class CatalogueItemAdmin(ModelView, model=CatalogueItem):
+    column_list = [CatalogueItem.id, CatalogueItem.title, CatalogueItem.price, CatalogueItem.status, CatalogueItem.category, CatalogueItem.created_at]

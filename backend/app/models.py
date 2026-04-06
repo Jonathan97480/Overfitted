@@ -70,3 +70,24 @@ class Product(Base):
     price = Column(Float, nullable=False)
     category = Column(String, nullable=True)
 
+
+class CatalogueStatus(str, enum.Enum):
+    draft = "draft"
+    active = "active"
+    archived = "archived"
+
+
+class CatalogueItem(Base):
+    __tablename__ = "catalogue"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    price = Column(Float, nullable=False)
+    category = Column(String, nullable=True)
+    status = Column(Enum(CatalogueStatus), default=CatalogueStatus.draft, nullable=False)
+    printful_variant_id = Column(String, nullable=True)
+    tags = Column(String, nullable=True)  # JSON array sérialisé en String
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+

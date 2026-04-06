@@ -4,17 +4,22 @@ Tous les endpoints (sauf /login) requièrent un Bearer JWT admin valide.
 """
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 from datetime import datetime
+import os
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Design, DesignStatus, Order, OrderStatus, Product, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Order, OrderStatus, Product, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
+
+_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "static", "catalogue")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -253,3 +258,96 @@ async def delete_product(product_id: int, db: DBDep):
     await db.delete(product)
     await db.commit()
     return {"deleted": product_id}
+
+
+# ─── Catalogue (créations boutique admin) ──────────────────────────────────
+
+class CatalogueItemOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    image_url: Optional[str]
+    price: float
+    category: Optional[str]
+    status: CatalogueStatus
+    printful_variant_id: Optional[str]
+    tags: Optional[str]
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class CatalogueItemCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    price: float
+    category: Optional[str] = None
+    status: CatalogueStatus = CatalogueStatus.draft
+    printful_variant_id: Optional[str] = None
+    tags: Optional[str] = None
+
+
+class CatalogueItemUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    price: Optional[float] = None
+    category: Optional[str] = None
+    status: Optional[CatalogueStatus] = None
+    printful_variant_id: Optional[str] = None
+    tags: Optional[str] = None
+
+
+@router.get("/catalogue", response_model=list[CatalogueItemOut], dependencies=[Depends(verify_admin_token)])
+async def list_catalogue(db: DBDep, skip: int = 0, limit: int = Query(100, le=500)):
+    result = await db.execute(
+        select(CatalogueItem).order_by(CatalogueItem.created_at.desc()).offset(skip).limit(limit)
+    )
+    return result.scalars().all()
+
+
+@router.post("/catalogue", response_model=CatalogueItemOut, status_code=201, dependencies=[Depends(verify_admin_token)])
+async def create_catalogue_item(body: CatalogueItemCreate, db: DBDep):
+    item = CatalogueItem(**body.model_dump())
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.post("/catalogue/upload-image", dependencies=[Depends(verify_admin_token)])
+async def upload_catalogue_image(file: UploadFile = File(...)):
+    """Upload une image pour une création catalogue. Retourne {url: '...'}"""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        raise HTTPException(status_code=400, detail="Format non supporté. Utilisez JPG, PNG, WEBP ou GIF.")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(_UPLOAD_DIR, filename)
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10 MB max
+        raise HTTPException(status_code=413, detail="Image trop lourde (max 10 Mo).")
+    with open(dest, "wb") as f:
+        f.write(content)
+    return {"url": f"/static/catalogue/{filename}"}
+
+
+@router.patch("/catalogue/{item_id}", response_model=CatalogueItemOut, dependencies=[Depends(verify_admin_token)])
+async def update_catalogue_item(item_id: int, body: CatalogueItemUpdate, db: DBDep):
+    item = await db.get(CatalogueItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Créaion introuvable.")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.delete("/catalogue/{item_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_catalogue_item(item_id: int, db: DBDep):
+    item = await db.get(CatalogueItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Création introuvable.")
+    await db.delete(item)
+    await db.commit()
+    return {"deleted": item_id}

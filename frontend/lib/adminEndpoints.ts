@@ -43,6 +43,21 @@ export interface ProductOut {
     category: string | null;
 }
 
+export type CatalogueStatus = "draft" | "active" | "archived";
+
+export interface CatalogueItemOut {
+    id: number;
+    title: string;
+    description: string | null;
+    image_url: string | null;
+    price: number;
+    category: string | null;
+    status: CatalogueStatus;
+    printful_variant_id: string | null;
+    tags: string | null;
+    created_at: string;
+}
+
 export const adminApiExtended = adminApi.injectEndpoints({
     endpoints: (build) => ({
         // Stats
@@ -129,6 +144,42 @@ export const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/products/${id}`, method: "DELETE" }),
             invalidatesTags: ["Product"],
         }),
+
+        // Catalogue (créations boutique admin)
+        listCatalogue: build.query<CatalogueItemOut[], { skip?: number; limit?: number }>({
+            query: ({ skip = 0, limit = 100 } = {}) =>
+                `/catalogue?skip=${skip}&limit=${limit}`,
+            providesTags: ["Catalogue"],
+        }),
+        createCatalogueItem: build.mutation<
+            CatalogueItemOut,
+            Omit<CatalogueItemOut, "id" | "created_at">
+        >({
+            query: (body) => ({ url: "/catalogue", method: "POST", body }),
+            invalidatesTags: ["Catalogue"],
+        }),
+        updateCatalogueItem: build.mutation<
+            CatalogueItemOut,
+            { id: number } & Partial<Omit<CatalogueItemOut, "id" | "created_at">>
+        >({
+            query: ({ id, ...body }) => ({
+                url: `/catalogue/${id}`,
+                method: "PATCH",
+                body,
+            }),
+            invalidatesTags: ["Catalogue"],
+        }),
+        deleteCatalogueItem: build.mutation<{ deleted: number }, number>({
+            query: (id) => ({ url: `/catalogue/${id}`, method: "DELETE" }),
+            invalidatesTags: ["Catalogue"],
+        }),
+        uploadCatalogueImage: build.mutation<{ url: string }, FormData>({
+            query: (formData) => ({
+                url: "/catalogue/upload-image",
+                method: "POST",
+                body: formData,
+            }),
+        }),
     }),
 });
 
@@ -145,4 +196,9 @@ export const {
     useCreateProductMutation,
     useUpdateProductMutation,
     useDeleteProductMutation,
+    useListCatalogueQuery,
+    useCreateCatalogueItemMutation,
+    useUpdateCatalogueItemMutation,
+    useDeleteCatalogueItemMutation,
+    useUploadCatalogueImageMutation,
 } = adminApiExtended;
