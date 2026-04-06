@@ -204,8 +204,10 @@ function StepValidation({ form }: { form: FormData }) {
         { label: "Prix", value: `${parseFloat(form.price || "0").toFixed(2)} €` },
         { label: "Image", value: form.image_url ? "Uploadée" : "Non renseignée" },
         { label: "DPI", value: form.dpi ? `${form.dpi} DPI` : "—" },
-        { label: "Prêt pour impression", value: form.dpi ? (form.print_ready ? "✓ Oui" : "✗ Non (< 300 DPI)") : "—",
-          color: form.print_ready ? "#22C55E" : form.dpi !== null ? "#EF4444" : undefined },
+        {
+            label: "Prêt pour impression", value: form.dpi ? (form.print_ready ? "✓ Oui" : "✗ Non (< 300 DPI)") : "—",
+            color: form.print_ready ? "#22C55E" : form.dpi !== null ? "#EF4444" : undefined
+        },
     ];
     return (
         <div className="space-y-3">
@@ -249,12 +251,16 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
     const handleSubmit = async () => {
         try {
             if (isEdit && initial) {
-                await updateProduct({ id: initial.id, name: form.name, category: form.category || null,
-                    price: parseFloat(form.price), image_url: form.image_url }).unwrap();
+                await updateProduct({
+                    id: initial.id, name: form.name, category: form.category || null,
+                    price: parseFloat(form.price), image_url: form.image_url
+                }).unwrap();
             } else {
-                await createProduct({ name: form.name, category: form.category || null,
+                await createProduct({
+                    name: form.name, category: form.category || null,
                     printful_variant_id: form.printful_variant_id, price: parseFloat(form.price),
-                    image_url: form.image_url }).unwrap();
+                    image_url: form.image_url
+                }).unwrap();
             }
             onClose();
         } catch { /* ignore */ }
@@ -277,8 +283,10 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
                         return (
                             <div key={n} className="flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                    style={{ background: active ? "var(--admin-accent)" : done ? "#22C55E" : "var(--admin-border)",
-                                        color: (active || done) ? "white" : "var(--admin-muted-2)" }}>
+                                    style={{
+                                        background: active ? "var(--admin-accent)" : done ? "#22C55E" : "var(--admin-border)",
+                                        color: (active || done) ? "white" : "var(--admin-muted-2)"
+                                    }}>
                                     {done ? "✓" : n}
                                 </div>
                                 <span className="text-xs" style={{ color: active ? "white" : "var(--admin-muted-2)" }}>{label}</span>
