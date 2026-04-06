@@ -102,8 +102,9 @@ class PromoCode(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, index=True, nullable=False)
-    discount_percent = Column(Integer, nullable=False)
-    max_uses = Column(Integer, nullable=True)       # None = illimité
+    discount_type = Column(String, nullable=False, default="percent")  # 'percent' | 'fixed'
+    discount_value = Column(Float, nullable=False, default=0.0)
+    max_uses = Column(Integer, nullable=False, default=0)  # 0 = illimité
     uses_count = Column(Integer, default=0, nullable=False)
     is_active = Column(Integer, default=1, nullable=False)  # 1=actif, 0=inactif (SQLite bool)
     expires_at = Column(DateTime(timezone=True), nullable=True)

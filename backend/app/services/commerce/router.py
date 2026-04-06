@@ -110,7 +110,8 @@ class PromoValidateRequest(BaseModel):
 
 class PromoValidateResponse(BaseModel):
     valid: bool
-    discount_percent: int
+    discount_type: str
+    discount_value: float
     discount_amount: float
     final_price_ht: float
     message: str
@@ -132,7 +133,8 @@ async def validate_promo(body: PromoValidateRequest, db: DBDep):
     def _invalid(msg: str) -> PromoValidateResponse:
         return PromoValidateResponse(
             valid=False,
-            discount_percent=0,
+            discount_type="percent",
+            discount_value=0.0,
             discount_amount=0.0,
             final_price_ht=round(body.cart_total_ht, 2),
             message=msg,
@@ -144,17 +146,23 @@ async def validate_promo(body: PromoValidateRequest, db: DBDep):
         return _invalid("Code promo inactif.")
     if promo.expires_at and promo.expires_at.replace(tzinfo=_tz.utc) < datetime.now(_tz.utc):
         return _invalid("Code promo expiré.")
-    if promo.max_uses is not None and promo.uses_count >= promo.max_uses:
+    if promo.max_uses != 0 and promo.uses_count >= promo.max_uses:
         return _invalid("Code promo épuisé.")
 
-    discount_amount = round(body.cart_total_ht * promo.discount_percent / 100, 2)
+    if promo.discount_type == "fixed":
+        discount_amount = round(min(promo.discount_value, body.cart_total_ht), 2)
+        label = f"{promo.discount_value:.2f} € de remise"
+    else:
+        discount_amount = round(body.cart_total_ht * promo.discount_value / 100, 2)
+        label = f"{promo.discount_value:g}% de remise"
     final = round(body.cart_total_ht - discount_amount, 2)
     return PromoValidateResponse(
         valid=True,
-        discount_percent=promo.discount_percent,
+        discount_type=promo.discount_type,
+        discount_value=promo.discount_value,
         discount_amount=discount_amount,
         final_price_ht=final,
-        message=f"Code valide — {promo.discount_percent}% de remise.",
+        message=f"Code valide — {label}.",
     )
 
 

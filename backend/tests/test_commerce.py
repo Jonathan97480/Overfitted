@@ -326,7 +326,7 @@ async def test_promo_validate_valid_code():
     TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with TestSession() as s:
-        promo = PromoCode(code="CHAOS10", discount_percent=10, is_active=1)
+        promo = PromoCode(code="CHAOS10", discount_type="percent", discount_value=10.0, is_active=1)
         s.add(promo)
         await s.commit()
 
@@ -336,7 +336,8 @@ async def test_promo_validate_valid_code():
     assert r.status_code == 200
     data = r.json()
     assert data["valid"] is True
-    assert data["discount_percent"] == 10
+    assert data["discount_type"] == "percent"
+    assert data["discount_value"] == 10.0
     assert data["discount_amount"] == 10.0
     assert data["final_price_ht"] == 90.0
     app.dependency_overrides.pop(get_db, None)
@@ -359,7 +360,7 @@ async def test_promo_validate_inactive_code():
     engine = await _make_db()
     TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with TestSession() as s:
-        s.add(PromoCode(code="INACTIVE", discount_percent=20, is_active=0))
+        s.add(PromoCode(code="INACTIVE", discount_type="percent", discount_value=20.0, is_active=0))
         await s.commit()
     async with await _client_with_db(engine) as ac:
         r = await ac.post("/commerce/promo/validate", json={"code": "INACTIVE", "cart_total_ht": 50.0})
@@ -375,7 +376,7 @@ async def test_promo_validate_exhausted_code():
     engine = await _make_db()
     TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with TestSession() as s:
-        s.add(PromoCode(code="USED", discount_percent=15, is_active=1, max_uses=5, uses_count=5))
+        s.add(PromoCode(code="USED", discount_type="percent", discount_value=15.0, is_active=1, max_uses=5, uses_count=5))
         await s.commit()
     async with await _client_with_db(engine) as ac:
         r = await ac.post("/commerce/promo/validate", json={"code": "USED", "cart_total_ht": 50.0})
@@ -393,7 +394,7 @@ async def test_promo_validate_expired_code():
     TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with TestSession() as s:
         s.add(PromoCode(
-            code="EXPIRED", discount_percent=5, is_active=1,
+            code="EXPIRED", discount_type="percent", discount_value=5.0, is_active=1,
             expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
         ))
         await s.commit()
@@ -412,7 +413,7 @@ async def test_promo_validate_case_insensitive():
     engine = await _make_db()
     TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with TestSession() as s:
-        s.add(PromoCode(code="UPPER10", discount_percent=10, is_active=1))
+        s.add(PromoCode(code="UPPER10", discount_type="percent", discount_value=10.0, is_active=1))
         await s.commit()
     async with await _client_with_db(engine) as ac:
         r = await ac.post("/commerce/promo/validate", json={"code": "upper10", "cart_total_ht": 100.0})

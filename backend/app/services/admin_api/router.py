@@ -810,8 +810,9 @@ async def delete_catalogue_item(item_id: int, db: DBDep):
 class PromoCodeOut(BaseModel):
     id: int
     code: str
-    discount_percent: int
-    max_uses: Optional[int]
+    discount_type: str  # 'percent' | 'fixed'
+    discount_value: float
+    max_uses: int  # 0 = illimité
     uses_count: int
     is_active: bool
     expires_at: Optional[datetime]
@@ -823,7 +824,8 @@ class PromoCodeOut(BaseModel):
         return cls(
             id=obj.id,
             code=obj.code,
-            discount_percent=obj.discount_percent,
+            discount_type=obj.discount_type,
+            discount_value=obj.discount_value,
             max_uses=obj.max_uses,
             uses_count=obj.uses_count,
             is_active=bool(obj.is_active),
@@ -834,13 +836,15 @@ class PromoCodeOut(BaseModel):
 
 class PromoCodeCreate(BaseModel):
     code: str
-    discount_percent: int
-    max_uses: Optional[int] = None
+    discount_type: str = "percent"  # 'percent' | 'fixed'
+    discount_value: float
+    max_uses: int = 0  # 0 = illimité
     expires_at: Optional[datetime] = None
 
 
 class PromoCodeUpdate(BaseModel):
-    discount_percent: Optional[int] = None
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
     max_uses: Optional[int] = None
     is_active: Optional[bool] = None
     expires_at: Optional[datetime] = None
@@ -860,7 +864,8 @@ async def create_promo_code(body: PromoCodeCreate, db: DBDep) -> PromoCodeOut:
         raise HTTPException(status_code=409, detail="Ce code existe déjà.")
     item = PromoCode(
         code=body.code.upper(),
-        discount_percent=body.discount_percent,
+        discount_type=body.discount_type,
+        discount_value=body.discount_value,
         max_uses=body.max_uses,
         expires_at=body.expires_at,
         uses_count=0,

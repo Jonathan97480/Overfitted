@@ -277,8 +277,8 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 ### Codes Promo `/admin/promo`
 
 #### Prérequis backend
-- [ ] **Modèle `PromoCode`** — `code` (unique, uppercase), `discount_type: 'percent'|'fixed'`, `discount_value`, `max_uses` (0 = illimité), `uses_count`, `expires_at`, `is_active`
-- [ ] **Migration Alembic** `add_promo_code`
+- [x] **Modèle `PromoCode`** — `code` (unique, uppercase), `discount_type: 'percent'|'fixed'`, `discount_value`, `max_uses` (0 = illimité), `uses_count`, `expires_at`, `is_active`
+- [x] **Migration Alembic** `add_promo_code`
 
 #### Composants frontend
 - [x] **`PromoCodesTable`** — colonnes : Code | Type | Valeur | Utilisations (X/max) | Expiration | Statut | Actions
