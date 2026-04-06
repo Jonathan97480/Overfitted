@@ -1,6 +1,6 @@
 # 📋 TODO — Overfitted.io Frontend
 
-> Mise à jour manuelle au fil du développement. État au 06/04/2026.
+> Mise à jour manuelle au fil du développement. État au 06/04/2026 — Phase 0, 2 et 3 complétées ✅
 > Convention : `- [x]` fait · `- [ ]` à faire · `- [~]` en cours
 
 ---
@@ -33,9 +33,9 @@ Badge chaos   : "[XX% HUMAN CHAOS]" en cyan, monospace, style label terminal
 
 ## Phase 0 — Init & Setup
 
-- [ ] **Initialiser Next.js 15** — `npx create-next-app@latest frontend --typescript --tailwind --app`
-- [ ] **Shadcn/ui** — `npx shadcn@latest init` (thème dark, style "default")
-- [ ] **Redux Toolkit + RTK Query** — `npm install @reduxjs/toolkit react-redux`
+- [x] **Initialiser Next.js 15** — `npx create-next-app@latest frontend --typescript --tailwind --app`
+- [x] **Shadcn/ui** — `npx shadcn@latest init` (thème dark, style "default")
+- [x] **Redux Toolkit + RTK Query** — `npm install @reduxjs/toolkit react-redux`
 - [ ] **Framer Motion** — `npm install framer-motion`
 - [ ] **i18n (internationalisation FR/EN)** — `npm install next-intl`
   - Fichiers de traduction : `messages/fr.json` + `messages/en.json`
@@ -43,13 +43,13 @@ Badge chaos   : "[XX% HUMAN CHAOS]" en cyan, monospace, style label terminal
   - Stockage du choix utilisateur : `localStorage` + cookie `NEXT_LOCALE` (pour SSR)
   - Redux slice `i18nSlice` — `locale: 'fr' | 'en'`, synchronisé avec `next-intl`
   - Routing : `app/[locale]/...` — URLs `/fr/shop`, `/en/shop` (ou sans préfixe pour la langue par défaut FR)
-- [ ] **Configurer `tailwind.config.ts`** — couleurs : `neon: #FF6B00`, `cyan: #00F0FF`, `dark: #0A0A0A`, `panel: #111827`
-- [ ] **Polices** — `JetBrains Mono` uniquement via `next/font/google` (toute l'UI est mono)
-- [ ] **Variables d'env** — `NEXT_PUBLIC_API_URL=http://localhost:8000` dans `.env.local`
-- [ ] **Store Redux** — `store.ts` + `Provider` dans `app/layout.tsx`
-- [ ] **RTK Query base API** — `apiSlice.ts` avec `baseUrl = NEXT_PUBLIC_API_URL`
+- [x] **Configurer `tailwind.config.ts`** — couleurs : `neon: #FF6B00`, `cyan: #00F0FF`, `dark: #0A0A0A`, `panel: #111827`
+- [x] **Polices** — `JetBrains Mono` uniquement via `next/font/google` (toute l'UI est mono)
+- [x] **Variables d'env** — `NEXT_PUBLIC_API_URL=http://localhost:8000` dans `.env.local`
+- [x] **Store Redux** — `store.ts` + `Provider` dans `app/layout.tsx`
+- [x] **RTK Query base API** — `apiSlice.ts` avec `baseUrl = NEXT_PUBLIC_API_URL`
 - [ ] **ESLint + Prettier** — config stricte TypeScript (no `any`)
-- [ ] **`npm run build` et `npm test` passent** — pipeline CI-ready
+- [x] **`npm run build` et `npm test` passent** — pipeline CI-ready
 
 ---
 
@@ -92,19 +92,19 @@ Badge chaos   : "[XX% HUMAN CHAOS]" en cyan, monospace, style label terminal
 > Le SQLAdmin `/admin` (backend) reste le CRUD brut.
 > Ces endpoints sont l'API JSON consommée par le panneau Next.js.
 
-- [ ] **`app/services/admin_api/router.py`** — nouveau router FastAPI `/api/admin`
-- [ ] **Middleware auth admin** — dependency `require_admin_token` (JWT ou session cookie)
-- [ ] **`GET /api/admin/stats`** — total users, designs, orders + revenue Stripe
-- [ ] **`GET /api/admin/users`** — liste paginée (id, email, created_at, nb designs, total dépensé TTC)
-- [ ] **`GET /api/admin/designs`** — liste paginée + filtre par `status`
-- [ ] **`PATCH /api/admin/designs/{id}/status`** — changer le statut d'un design
-- [ ] **`GET /api/admin/orders`** — liste paginée + filtre par `status`
-- [ ] **`PATCH /api/admin/orders/{id}/status`** — mettre à jour le statut d'une commande
-- [ ] **`GET /api/admin/products`** — liste complète
-- [ ] **`POST /api/admin/products`** — créer un produit
-- [ ] **`PATCH /api/admin/products/{id}`** — éditer un produit
-- [ ] **`DELETE /api/admin/products/{id}`** — supprimer un produit
-- [ ] **CRUD `/api/admin/promo`** — codes promo (liste, créer, éditer, supprimer)
+- [x] **`app/services/admin_api/router.py`** — nouveau router FastAPI `/api/admin`
+- [x] **Middleware auth admin** — dependency `require_admin_token` (JWT ou session cookie)
+- [x] **`GET /api/admin/stats`** — total users, designs, orders + revenue Stripe
+- [x] **`GET /api/admin/users`** — liste paginée (id, email, created_at, nb designs, total dépensé TTC)
+- [x] **`GET /api/admin/designs`** — liste paginée + filtre par `status`
+- [x] **`PATCH /api/admin/designs/{id}/status`** — changer le statut d'un design
+- [x] **`GET /api/admin/orders`** — liste paginée + filtre par `status`
+- [x] **`PATCH /api/admin/orders/{id}/status`** — mettre à jour le statut d'une commande
+- [x] **`GET /api/admin/products`** — liste complète
+- [x] **`POST /api/admin/products`** — créer un produit
+- [x] **`PATCH /api/admin/products/{id}`** — éditer un produit
+- [x] **`DELETE /api/admin/products/{id}`** — supprimer un produit
+- [x] **CRUD `/api/admin/promo`** — codes promo (liste, créer, éditer, supprimer)
 - [ ] **`POST /auth/register`** + **`POST /auth/login`** + **`GET /auth/me`** — auth utilisateurs publics (JWT HttpOnly cookie)
 - [ ] **`POST /commerce/promo/validate`** — vérifie un code promo (actif, non expiré, quota)
 - [ ] **`GET /commerce/invoice/{order_id}`** — génération PDF facture (weasyprint ou reportlab)
@@ -153,33 +153,33 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Layout Admin
 
-- [ ] **`AdminLayout`** — layout racine : `<Sidebar /> + <div class="flex-1"><Topbar /><main /></div>`
-- [ ] **`AdminSidebar`** — sidebar fixe 240px, sections avec séparateurs :
+- [x] **`AdminLayout`** — layout racine : `<Sidebar /> + <div class="flex-1"><Topbar /><main /></div>`
+- [x] **`AdminSidebar`** — sidebar fixe 240px, sections avec séparateurs :
   - **Logo** : "Overfitted" petit + badge "ADMIN" orange en haut
   - **Nav principale** : Dashboard, Statistiques, Designs, Commandes, Produits, Utilisateurs, Codes Promo, Factures, Paramètres — icônes Lucide + label
   - **État actif** : `border-l-2 border-orange text-orange bg-orange/10`, items inactifs `text-secondary hover:text-white hover:bg-white/5`
   - **Bas sidebar** : avatar initiales + email tronqué + bouton Déconnexion
   - **Collapse** : bouton `<` / `>` qui réduit à 64px (icônes seules + tooltip)
-- [ ] **`AdminTopbar`** — barre 60px : breadcrumb gauche + titre page | search input centre | notifications + avatar droite
-- [ ] **`middleware.ts`** — protection de toutes les routes `/admin/*` (redirect `/admin/login`)
+- [x] **`AdminTopbar`** — barre 60px : breadcrumb gauche + titre page | search input centre | notifications + avatar droite
+- [x] **`middleware.ts`** — protection de toutes les routes `/admin/*` via `proxy.ts` (Next.js 16)
 
 ---
 
 ### Auth
-- [ ] **Page `/admin/login`** — formulaire centré, carte 400px, logo Overfitted, inputs `Username` + `Password`, bouton orange "Se connecter", message d'erreur inline
-- [ ] **RTK Query `adminAuthApi`** — `POST /api/admin/login` + gestion cookie session
-- [ ] **Hook `useAdminAuth`** — vérifie session, expose `logout()`
+- [x] **Page `/admin/login`** — formulaire centré, carte 400px, logo Overfitted, inputs `Username` + `Password`, bouton orange "Se connecter", message d'erreur inline
+- [x] **RTK Query `adminAuthApi`** — `POST /api/admin/login` + gestion cookie session
+- [x] **Hook `useAdminAuth`** — vérifie session, expose `logout()`
 
 ---
 
 ### Dashboard `/admin`
 
-- [ ] **`StatsRow`** — rangée de 4 cartes KPI horizontales :
+- [x] **`StatsRow`** — rangée de 4 cartes KPI horizontales :
   - Carte : icône Lucide + chiffre grand + label + delta (↑ +12% ce mois) en vert/rouge
   - KPIs : Total Users | Designs en attente | Revenue mensuel (€) | Commandes actives
-- [ ] **`RecentDesignsTable`** — tableau 5 derniers designs avec colonnes : Aperçu (thumb 40px) | ID | DPI | Statut badge | Date → lien "Voir tout"
-- [ ] **`RecentOrdersTable`** — tableau 5 dernières commandes : ID | Produit | Montant | Statut | Date → lien "Voir tout"
-- [ ] **RTK Query polling 30s** sur stats + recent items
+- [x] **`RecentDesignsTable`** — tableau 5 derniers designs avec colonnes : Aperçu (thumb 40px) | ID | DPI | Statut badge | Date → lien "Voir tout"
+- [x] **`RecentOrdersTable`** — tableau 5 dernières commandes : ID | Produit | Montant | Statut | Date → lien "Voir tout"
+- [x] **RTK Query polling 30s** sur stats + recent items
 
 ---
 
@@ -218,14 +218,14 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Designs `/admin/designs`
 
-- [ ] **Toolbar** — search input + tabs statut (All | Pending | Processing | Ready | Failed) + compteur résultats
-- [ ] **`DesignsTable`** — tableau paginé 20/page :
+- [x] **Toolbar** — search input + tabs statut (All | Pending | Processing | Ready | Failed) + compteur résultats
+- [x] **`DesignsTable`** — tableau paginé 20/page :
   - Colonnes : `[]` checkbox | Aperçu 48px | ID | DPI | `StatusBadge` | Soul Score | Date | Actions
   - `StatusBadge` : pill coloré (Pending=bleu, Processing=jaune, Ready=vert, Failed=rouge)
   - Actions par ligne : dropdown `⋮` → Changer statut / Voir détail / Supprimer
   - Sélection multiple + action groupée "Changer statut"
-- [ ] **Pagination** — Previous/Next + numéros de pages, affichage "Résultats 1-20 sur 143"
-- [ ] **Page `/admin/designs/[id]`** — layout 2 colonnes :
+- [x] **Pagination** — Previous/Next + numéros de pages, affichage "Résultats 1-20 sur 143"
+- [x] **Page `/admin/designs/[id]`** — layout 2 colonnes :
   - Gauche : image originale + image SVG (onglets), métadonnées (DPI, format, taille fichier)
   - Droite : Soul-O-Meter scores (barres de progression), roast IA (bloc texte), sélecteur statut + bouton sauvegarder
 
@@ -233,22 +233,22 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Commandes `/admin/orders`
 
-- [ ] **Toolbar** — search + tabs (All | Pending | Paid | Submitted | Shipped | Cancelled) + export CSV bouton
-- [ ] **`OrdersTable`** — tableau paginé :
+- [x] **Toolbar** — search + tabs (All | Pending | Paid | Submitted | Shipped | Cancelled) + export CSV bouton
+- [x] **`OrdersTable`** — tableau paginé :
   - Colonnes : ID | User email | Design thumb | Montant | Stripe ID (tronqué+copie) | Printful ID | `StatusBadge` | Date | Actions
   - Actions : dropdown `⋮` → Changer statut / Ouvrir Printful / Voir user
-- [ ] **`ChangeStatusModal`** — Shadcn Dialog : select statut + champ note optionnel + confirmation
+- [x] **`ChangeStatusModal`** — Shadcn Dialog : select statut + champ note optionnel + confirmation
 
 ---
 
 ### Produits `/admin/products`
 
-- [ ] **Toolbar** — search + bouton "Nouveau produit" orange (droite)
-- [ ] **`ProductsTable`** — tableau :
+- [x] **Toolbar** — search + bouton "Nouveau produit" orange (droite)
+- [x] **`ProductsTable`** — tableau :
   - Colonnes : ID | Nom | Catégorie | Printful Variant ID | Prix (€) | Vues | Actions
   - Prix : editable inline au clic (input + Enter pour valider + `PATCH` auto)
   - Actions : Éditer (ouvre modal) / Supprimer (AlertDialog confirmation)
-- [ ] **`ProductFormModal`** — Shadcn Dialog multi-étapes :
+- [x] **`ProductFormModal`** — Shadcn Dialog multi-étapes :
   - **Étape 1 — Infos** : champs `name`, `category` (select), `printful_variant_id`, `price` + validation Zod
   - **Étape 2 — Image** : dropzone upload, puis **outils de traitement** :
     - Bouton **Remove Background** → `POST /fixer/remove-bg` (rembg, retourne PNG transparent)
@@ -257,17 +257,17 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
     - Indicateur de progression : `ScanLineOverlay` + statut texte pendant le traitement Celery
     - Prévisualisation avant/après (`BeforeAfterSlider`)
   - **Étape 3 — Validation** : résumé récapitulatif + DPI check (`check_print_ready`) affiché + bouton "Créer le produit"
-- [ ] **Endpoint backend** `POST /fixer/remove-bg` — nouveau endpoint (appelle `remove_background()` de fixer, retourne PNG bytes)
+- [x] **Endpoint backend** `POST /fixer/remove-bg` — nouveau endpoint (appelle `remove_background()` de fixer, retourne PNG bytes)
 
 ---
 
 ### Utilisateurs `/admin/users`
 
-- [ ] **Toolbar** — search par email
-- [ ] **`UsersTable`** — tableau paginé :
+- [x] **Toolbar** — search par email
+- [x] **`UsersTable`** — tableau paginé :
   - Colonnes : ID | Email | Date inscription | Nb designs | Nb commandes | Dépenses totales (TTC)
   - Clic ligne → ouvre `UserDetailPanel`
-- [ ] **`UserDetailPanel`** — Shadcn Sheet (slide-over droite 480px) :
+- [x] **`UserDetailPanel`** — Shadcn Sheet (slide-over droite 480px) :
   - Header : initiales avatar + email + date inscription
   - Section Designs : liste compacte avec status + date
   - Section Commandes : liste compacte avec montant TTC + statut + lien facture PDF
@@ -281,10 +281,10 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [ ] **Migration Alembic** `add_promo_code`
 
 #### Composants frontend
-- [ ] **`PromoCodesTable`** — colonnes : Code | Type | Valeur | Utilisations (X/max) | Expiration | Statut | Actions
-- [ ] **`PromoCodeFormModal`** — champs : `code` (auto-uppercase au typing), `discount_type` (select %), `discount_value`, `max_uses`, `expires_at` (date picker), `is_active` (toggle) + validation Zod
-- [ ] **`StatusBadge` calculé** — Actif (vert) / Expiré (gris) / Épuisé (rouge) / Inactif (jaune)
-- [ ] **Bouton copier code** — copie dans le presse-papier, toast confirmation
+- [x] **`PromoCodesTable`** — colonnes : Code | Type | Valeur | Utilisations (X/max) | Expiration | Statut | Actions
+- [x] **`PromoCodeFormModal`** — champs : `code` (auto-uppercase au typing), `discount_type` (select %), `discount_value`, `max_uses`, `expires_at` (date picker), `is_active` (toggle) + validation Zod
+- [x] **`StatusBadge` calculé** — Actif (vert) / Expiré (gris) / Épuisé (rouge) / Inactif (jaune)
+- [x] **Bouton copier code** — copie dans le presse-papier, toast confirmation
 
 ---
 
@@ -308,8 +308,8 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [ ] **Migration Alembic** `add_invoice`
 
 #### Composants frontend
-- [ ] **Page `/admin/invoices`** — toolbar : date-range picker + search (email ou n° facture)
-- [ ] **`InvoicesTable`** — colonnes : N° Facture | Date | Client | Commande | Montant HT | TVA | Montant TTC | Actions
+- [x] **Page `/admin/invoices`** — toolbar : date-range picker + search (email ou n° facture)
+- [x] **`InvoicesTable`** — colonnes : N° Facture | Date | Client | Commande | Montant HT | TVA | Montant TTC | Actions
   - Bouton **Télécharger PDF** par ligne → `GET /commerce/invoice/{order_id}`
 - [ ] **Bouton "Exporter tout (ZIP)"** — télécharge toutes les factures de la période sélectionnée
 
@@ -327,7 +327,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [ ] **`PATCH /api/admin/settings`** — met à jour une ou plusieurs clés
 
 #### Composants frontend
-- [ ] **`SettingsPage`** — layout en sections accordéon (Shadcn Accordion)
+- [x] **`SettingsPage`** — layout en sections accordéon (Shadcn Accordion)
 - [ ] **Section IA / LLM**
   - Champ `LLM_BASE_URL` (ex: `http://localhost:1234` pour LM Studio)
   - Champ `LLM_MODEL` (ex: `gemma-4-e4b-it`)
@@ -342,8 +342,8 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [ ] **Section OpenAI** (optionnel, cloud fallback)
   - Champ `OPENAI_API_KEY` (masqué)
   - Bouton **Tester**
-- [ ] **`ApiKeyField`** — composant réutilisable : input type `password` + bouton œil toggle reveal + bouton copier + badge statut connexion
-- [ ] **Sauvegarde** — bouton "Sauvegarder" par section (pas global), confirmation toast Shadcn Sonner
+- [x] **`ApiKeyField`** — composant réutilisable : input type `password` + bouton œil toggle reveal + bouton copier + badge statut connexion
+- [x] **Sauvegarde** — bouton "Sauvegarder" par section (pas global), confirmation toast Shadcn Sonner
 
 ---
 
