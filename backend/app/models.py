@@ -11,6 +11,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=True)   # None pour les comptes legacy sans MDP
+    display_name = Column(String, nullable=True)
+    is_active = Column(Integer, default=1, nullable=False)   # 1=actif, 0=anonymisé
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     designs = relationship("Design", back_populates="user", lazy="select")
     orders = relationship("Order", back_populates="user", lazy="select")

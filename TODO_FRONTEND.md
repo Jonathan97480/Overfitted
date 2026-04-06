@@ -105,15 +105,15 @@ Badge chaos   : "[XX% HUMAN CHAOS]" en cyan, monospace, style label terminal
 - [x] **`PATCH /api/admin/products/{id}`** — éditer un produit
 - [x] **`DELETE /api/admin/products/{id}`** — supprimer un produit
 - [x] **CRUD `/api/admin/promo`** — codes promo (liste, créer, éditer, supprimer)
-- [ ] **`POST /auth/register`** + **`POST /auth/login`** + **`GET /auth/me`** — auth utilisateurs publics (JWT HttpOnly cookie)
-- [ ] **`POST /commerce/promo/validate`** — vérifie un code promo (actif, non expiré, quota)
-- [ ] **`GET /commerce/invoice/{order_id}`** — génération PDF facture (weasyprint ou reportlab)
-- [ ] **`GET /api/admin/invoices`** — liste paginée des factures admin
-- [ ] **`GET /commerce/checkout/confirm`** — vérification post-paiement Stripe (`session_id`)
-- [ ] **`GET /auth/me/export`** — export JSON données utilisateur (RGPD Art. 15)
-- [ ] **`DELETE /auth/me`** — anonymisation compte (RGPD Art. 17) — bloqué si commande active
-- [ ] **`PATCH /auth/me`** — modification email/nom/mot de passe
-- [ ] **Tests** — 20+ tests pour les nouveaux endpoints (auth, CRUD, promo, invoice PDF, RGPD)
+- [x] **`POST /auth/register`** + **`POST /auth/login`** + **`GET /auth/me`** — auth utilisateurs publics (JWT HttpOnly cookie)
+- [x] **`POST /commerce/promo/validate`** — vérifie un code promo (actif, non expiré, quota)
+- [x] **`GET /commerce/invoice/{order_id}`** — génération PDF facture (weasyprint ou reportlab)
+- [x] **`GET /api/admin/invoices`** — liste paginée des factures admin
+- [x] **`GET /commerce/checkout/confirm`** — vérification post-paiement Stripe (`session_id`)
+- [x] **`GET /auth/me/export`** — export JSON données utilisateur (RGPD Art. 15)
+- [x] **`DELETE /auth/me`** — anonymisation compte (RGPD Art. 17) — bloqué si commande active
+- [x] **`PATCH /auth/me`** — modification email/nom/mot de passe
+- [x] **Tests** — 20+ tests pour les nouveaux endpoints (auth, CRUD, promo, invoice PDF, RGPD)
 
 ---
 

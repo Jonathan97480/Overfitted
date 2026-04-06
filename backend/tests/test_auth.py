@@ -186,3 +186,245 @@ async def test_authenticate_malformed_value_returns_false():
 
     result = await auth.authenticate(request)
     assert result is False
+
+
+# ===========================================================================
+# Tests : /auth/* (utilisateurs publics — JWT HttpOnly cookie)
+# ===========================================================================
+
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+from app.main import app as _app
+from app.database import Base, get_db
+from app.models import Order, OrderStatus, User, Design
+
+
+async def _make_db():
+    """DB SQLite en mémoire — nouvel engine à chaque appel."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return engine
+
+
+async def _client_with_db(engine):
+    """Client HTTP isolé avec la DB en mémoire."""
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override():
+        async with TestSession() as s:
+            yield s
+
+    _app.dependency_overrides[get_db] = override
+    return AsyncClient(transport=ASGITransport(app=_app), base_url="http://test")
+
+
+# ---------------------------------------------------------------------------
+# Register
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_register_success():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/auth/register", json={"email": "user@x.io", "password": "password123"})
+    assert r.status_code == 201
+    assert "user_id" in r.json()
+    assert "user_token" in r.cookies
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_register_duplicate_email():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "dup@x.io", "password": "password123"})
+        r = await ac.post("/auth/register", json={"email": "dup@x.io", "password": "password123"})
+    assert r.status_code == 409
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_register_short_password():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/auth/register", json={"email": "x@x.io", "password": "abc"})
+    assert r.status_code == 422
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Login
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_login_success():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "login@x.io", "password": "password123"})
+        r = await ac.post("/auth/login", json={"email": "login@x.io", "password": "password123"})
+    assert r.status_code == 200
+    assert "user_token" in r.cookies
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_login_wrong_password():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "wp@x.io", "password": "password123"})
+        r = await ac.post("/auth/login", json={"email": "wp@x.io", "password": "wrongpass"})
+    assert r.status_code == 401
+    # Message générique — pas d'énumération email (OWASP)
+    assert "incorrect" in r.json()["detail"].lower()
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_login_unknown_email():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/auth/login", json={"email": "nobody@x.io", "password": "password123"})
+    # Même message que wrong password (OWASP anti-enumeration)
+    assert r.status_code == 401
+    assert "incorrect" in r.json()["detail"].lower()
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/me
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_get_me_authenticated():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "me@x.io", "password": "password123"})
+        r = await ac.get("/auth/me")
+    assert r.status_code == 200
+    assert r.json()["email"] == "me@x.io"
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_get_me_unauthenticated():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.get("/auth/me")
+    assert r.status_code == 401
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /auth/me
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_patch_display_name():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "patch@x.io", "password": "password123"})
+        r = await ac.patch("/auth/me", json={"display_name": "Overfitter"})
+    assert r.status_code == 200
+    assert r.json()["display_name"] == "Overfitter"
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_patch_password_wrong_current():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "pwd@x.io", "password": "correct_pass"})
+        r = await ac.patch("/auth/me", json={"current_password": "wrong", "new_password": "new_pass_99"})
+    assert r.status_code == 401
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/me/export  (RGPD Art. 15)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_export_me():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        await ac.post("/auth/register", json={"email": "export@x.io", "password": "password123"})
+        r = await ac.get("/auth/me/export")
+    assert r.status_code == 200
+    data = r.json()
+    assert "user" in data and "designs" in data and "orders" in data and "invoices" in data
+    assert data["user"]["email"] == "export@x.io"
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# DELETE /auth/me  (RGPD Art. 17)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_user_delete_me_success():
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override():
+        async with TestSession() as s:
+            yield s
+
+    _app.dependency_overrides[get_db] = override
+    async with AsyncClient(transport=ASGITransport(app=_app), base_url="http://test") as ac:
+        await ac.post("/auth/register", json={"email": "del@x.io", "password": "password123"})
+        r = await ac.delete("/auth/me")
+    assert r.status_code == 200
+
+    # Vérifier anonymisation
+    from sqlalchemy import select
+    async with TestSession() as s:
+        user = (await s.execute(select(User))).scalar_one()
+    assert user.email.startswith("deleted_")
+    assert user.is_active == 0
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_user_delete_me_blocked_active_order():
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override():
+        async with TestSession() as s:
+            yield s
+
+    _app.dependency_overrides[get_db] = override
+    async with AsyncClient(transport=ASGITransport(app=_app), base_url="http://test") as ac:
+        await ac.post("/auth/register", json={"email": "active@x.io", "password": "password123"})
+        me_r = await ac.get("/auth/me")
+        user_id = me_r.json()["id"]
+
+        # Injection commande active directement en DB
+        async with TestSession() as s:
+            design = Design(user_id=user_id, original_url="http://x.io/img.png", status="pending")
+            s.add(design)
+            await s.flush()
+            order = Order(user_id=user_id, design_id=design.id, status=OrderStatus.paid)
+            s.add(order)
+            await s.commit()
+
+        r = await ac.delete("/auth/me")
+    assert r.status_code == 409
+    assert "commande" in r.json()["detail"].lower()
+    _app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()

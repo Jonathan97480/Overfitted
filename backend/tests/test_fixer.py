@@ -189,7 +189,7 @@ def test_vectorize_to_svg_passes_correct_params():
     call_kwargs = mock_vtracer.convert_raw_image_to_svg.call_args
     assert call_kwargs[1]["colormode"] == "color"
     assert call_kwargs[1]["mode"] == "spline"
-    assert call_kwargs[1]["filter_speckle"] == 4
+    assert call_kwargs[1]["filter_speckle"] == 2
 
 
 def test_vectorize_to_svg_error_raises_value_error():

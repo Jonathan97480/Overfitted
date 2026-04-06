@@ -44,6 +44,8 @@ scipy==1.15.3
 stripe==15.0.1
 requests==2.33.1
 PyJWT==2.12.1
+pydantic[email]
+bcrypt
 reportlab==4.2.5
 # rembg et vtracer sont installés via Dockerfile (nécessitent Rust toolchain + ONNX runtime)
 # Décommenter pour dev local si la toolchain Rust est disponible :

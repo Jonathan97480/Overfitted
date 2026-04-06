@@ -284,3 +284,227 @@ async def test_webhook_endpoint_valid_returns_received():
     data = response.json()
     assert data["received"] is True
     assert data["type"] == "checkout.session.completed"
+
+
+# ===========================================================================
+# Tests : nouveaux endpoints commerce (promo/validate, checkout/confirm, invoice PDF)
+# ===========================================================================
+
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+from app.database import Base, get_db
+from app.models import Invoice, Order, OrderStatus, PromoCode, Design
+
+
+async def _make_db():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return engine
+
+
+async def _client_with_db(engine):
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override():
+        async with TestSession() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = override
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+# ---------------------------------------------------------------------------
+# POST /commerce/promo/validate
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_promo_validate_valid_code():
+    """Un code promo actif retourne valid=True et le montant de remise."""
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with TestSession() as s:
+        promo = PromoCode(code="CHAOS10", discount_percent=10, is_active=1)
+        s.add(promo)
+        await s.commit()
+
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "CHAOS10", "cart_total_ht": 100.0})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["valid"] is True
+    assert data["discount_percent"] == 10
+    assert data["discount_amount"] == 10.0
+    assert data["final_price_ht"] == 90.0
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_promo_validate_unknown_code():
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "UNKNOWN", "cart_total_ht": 50.0})
+    assert r.status_code == 200
+    assert r.json()["valid"] is False
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_promo_validate_inactive_code():
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with TestSession() as s:
+        s.add(PromoCode(code="INACTIVE", discount_percent=20, is_active=0))
+        await s.commit()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "INACTIVE", "cart_total_ht": 50.0})
+    assert r.status_code == 200
+    assert r.json()["valid"] is False
+    assert "inactif" in r.json()["message"].lower()
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_promo_validate_exhausted_code():
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with TestSession() as s:
+        s.add(PromoCode(code="USED", discount_percent=15, is_active=1, max_uses=5, uses_count=5))
+        await s.commit()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "USED", "cart_total_ht": 50.0})
+    assert r.status_code == 200
+    assert r.json()["valid"] is False
+    assert "épuisé" in r.json()["message"].lower()
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_promo_validate_expired_code():
+    from datetime import datetime, timezone
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with TestSession() as s:
+        s.add(PromoCode(
+            code="EXPIRED", discount_percent=5, is_active=1,
+            expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        ))
+        await s.commit()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "EXPIRED", "cart_total_ht": 50.0})
+    assert r.status_code == 200
+    assert r.json()["valid"] is False
+    assert "expiré" in r.json()["message"].lower()
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_promo_validate_case_insensitive():
+    """L'endpoint accepte le code en minuscules et normalise en UPPERCASE."""
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with TestSession() as s:
+        s.add(PromoCode(code="UPPER10", discount_percent=10, is_active=1))
+        await s.commit()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.post("/commerce/promo/validate", json={"code": "upper10", "cart_total_ht": 100.0})
+    assert r.status_code == 200
+    assert r.json()["valid"] is True
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# GET /commerce/checkout/confirm
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_checkout_confirm_no_stripe_key_dev_mode():
+    """Sans STRIPE_SECRET_KEY, retourne le mode dev avec status unknown."""
+    engine = await _make_db()
+    with patch.dict("os.environ", {"STRIPE_SECRET_KEY": ""}):
+        async with await _client_with_db(engine) as ac:
+            r = await ac.get("/commerce/checkout/confirm?session_id=cs_fake_123")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_id"] == "cs_fake_123"
+    assert "dev" in data["message"].lower()
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_checkout_confirm_missing_session_id():
+    """Sans session_id query param → 422."""
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.get("/commerce/checkout/confirm")
+    assert r.status_code == 422
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# GET /commerce/invoice/{order_id}
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_invoice_pdf_not_found():
+    """Commande sans facture associée → 404."""
+    engine = await _make_db()
+    async with await _client_with_db(engine) as ac:
+        r = await ac.get("/commerce/invoice/9999")
+    assert r.status_code == 404
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_invoice_pdf_returns_pdf():
+    """Facture existante → réponse application/pdf avec Content-Disposition."""
+    from datetime import datetime, timezone
+    engine = await _make_db()
+    TestSession = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with TestSession() as s:
+        # Design + Order + Invoice minimaux
+        design = Design(original_url="http://x.io/img.png", status="pending")
+        s.add(design)
+        await s.flush()
+        order = Order(design_id=design.id, status=OrderStatus.paid)
+        s.add(order)
+        await s.flush()
+        invoice = Invoice(
+            order_id=order.id,
+            invoice_number="OVF-2026-0001",
+            issued_at=datetime(2026, 4, 6, tzinfo=timezone.utc),
+            user_email="buyer@x.io",
+            user_name="Jean Chaos",
+            items_json='[{"description": "T-shirt", "quantity": 1, "unit_price_ht": 25.0}]',
+            amount_ht=25.0,
+            tva_rate=0.20,
+            amount_tva=5.0,
+            amount_ttc=30.0,
+            discount_amount=0.0,
+        )
+        s.add(invoice)
+        await s.commit()
+        order_id = order.id
+
+    async with await _client_with_db(engine) as ac:
+        r = await ac.get(f"/commerce/invoice/{order_id}")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "attachment" in r.headers.get("content-disposition", "")
+    assert len(r.content) > 500   # un PDF non vide
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()

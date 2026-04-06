@@ -15,6 +15,7 @@ from app.services.roast_engine.router import router as roast_router
 from app.services.soul_o_meter.router import router as soul_router
 from app.services.commerce.router import router as commerce_router
 from app.services.admin_api.router import router as admin_router
+from app.services.auth.router import router as auth_router
 
 load_dotenv()
 
@@ -73,6 +74,7 @@ app.include_router(roast_router)
 app.include_router(soul_router)
 app.include_router(commerce_router)
 app.include_router(admin_router)
+app.include_router(auth_router)
 
 # --- Fichiers statiques (images catalogue, etc.) ---
 _static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
