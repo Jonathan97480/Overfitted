@@ -1,6 +1,6 @@
 "use client";
 import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppDispatch } from "@/lib/hooks";
 import { setToken } from "@/lib/adminAuthSlice";
 
@@ -10,6 +10,7 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const dispatch = useAppDispatch();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -31,7 +32,8 @@ export default function AdminLoginPage() {
       }
       const { access_token } = await res.json();
       dispatch(setToken(access_token));
-      router.push("/admin");
+      const next = searchParams.get("next") ?? "/admin";
+      router.push(next);
     } catch {
       setError("Impossible de contacter l'API.");
     } finally {
