@@ -34,5 +34,7 @@ coverage/
 /dist/
 /build/
 
-# Env
-.env.*
+# Env — ignorer les fichiers secrets, pas les exemples
+.env
+.env.local
+.env.*.local
