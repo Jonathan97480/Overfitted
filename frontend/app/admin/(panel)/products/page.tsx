@@ -297,12 +297,17 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
 
 // ── Étape 3 — Mockup Printful ────────────────────────────────────────────────
 interface MPos { placement: string; scalePct: number; xOffsetPct: number; yOffsetPct: number; }
-const PLACEMENTS = [
-    { value: "front", label: "Devant" },
-    { value: "back", label: "Dos" },
-    { value: "sleeve_left", label: "Manche gauche" },
-    { value: "sleeve_right", label: "Manche droite" },
-];
+// Labels lisibles pour les placements Printful (fallback = valeur brute)
+const PLACEMENT_LABELS: Record<string, string> = {
+    front: "Devant",
+    back: "Dos",
+    sleeve_left: "Manche gauche",
+    sleeve_right: "Manche droite",
+    label: "Étiquette",
+    inside: "Intérieur",
+    embroidery_front: "Broderie devant",
+    embroidery_back: "Broderie dos",
+};
 
 function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
     const { data: products } = useListProductsQuery();
@@ -330,19 +335,59 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
     const catalogProductId = selectedProduct?.printful_catalog_product_id ?? null;
 
     // Templates Printful pour le produit sélectionné
-    const { data: tplData } = useGetMockupTemplatesQuery(catalogProductId!, {
+    const { data: tplData, isLoading: tplLoading, isError: tplError } = useGetMockupTemplatesQuery(catalogProductId!, {
         skip: catalogProductId == null,
     });
+    // En attente = produit sélectionné mais templates pas encore arrivés
+    // Bloqué = templates chargés mais vides (parser ou produit sans mockup generator)
+    const tplPending = catalogProductId != null && tplLoading;
+    const tplReady = !!tplData && !tplLoading;
+    const noTemplates = tplReady && (!tplData?.templates?.length);
 
-    // Template correspondant au placement choisi (ou is_default)
+    // Placements disponibles pour ce produit — source primaire: available_placements du backend (/printfiles)
+    const availablePlacements = useMemo(() => {
+        if (!tplData) return [];
+        // Priorité : available_placements retourné par le backend (source de vérité Printful)
+        const avail = tplData.available_placements;
+        if (avail && Object.keys(avail).length > 0) {
+            return Object.entries(avail).map(([value, label]) => ({
+                value,
+                label: PLACEMENT_LABELS[value] ?? (label as string),
+            }));
+        }
+        // Fallback : déduire depuis les templates (cas inattendu)
+        if (!tplData.templates?.length) return [];
+        const seen = new Set<string>();
+        return tplData.templates
+            .filter((t) => { if (seen.has(t.placement)) return false; seen.add(t.placement); return true; })
+            .map((t) => ({ value: t.placement, label: PLACEMENT_LABELS[t.placement] ?? t.placement }));
+    }, [tplData]);
+
+    // Placement effectif : pos.placement SI disponible, sinon premier valide du produit
+    // Calculé en useMemo pour être stable immédiatement quand tplData arrive (pas besoin d'un useEffect)
+    const effectivePlacement = useMemo(() => {
+        if (!availablePlacements.length) return pos.placement;
+        return availablePlacements.find((p) => p.value === pos.placement)
+            ? pos.placement
+            : availablePlacements[0].value;
+    }, [availablePlacements, pos.placement]);
+
+    // Sync pos.placement avec effectivePlacement (UI dropdown)
+    useEffect(() => {
+        if (effectivePlacement !== pos.placement) {
+            setPos((prev) => ({ ...prev, placement: effectivePlacement }));
+        }
+    }, [effectivePlacement]);
+
+    // Template actif basé sur effectivePlacement (toujours valide)
     const activeTpl: PrintfulTemplate | undefined = useMemo(() => {
         if (!tplData?.templates?.length) return undefined;
         return (
-            tplData.templates.find((t) => t.placement === pos.placement) ??
+            tplData.templates.find((t) => t.placement === effectivePlacement) ??
             tplData.templates.find((t) => t.is_default) ??
             tplData.templates[0]
         );
-    }, [tplData, pos.placement]);
+    }, [tplData, effectivePlacement]);
 
     // Dimensions canvas: largeur fixe 240, hauteur basée sur le template
     const CANVAS_W = 240;
@@ -384,7 +429,8 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
     const dTop = paTop + pos.yOffsetPct / 100 * paH - dH_canvas / 2;
 
     const handleGenerate = async () => {
-        if (!selectedProduct?.printful_catalog_product_id || !form.image_url || imgRatio === null) return;
+        if (!selectedProduct?.printful_catalog_product_id || !form.image_url || imgRatio === null || tplPending) return;
+        // effectivePlacement est toujours un placement valide pour ce produit (calculé en useMemo)
         setGenError(null);
         // dW/dH contraints dans l'area (ne débordent jamais)
         const dW = Math.min(AREA_W, Math.round(pos.scalePct / 100 * maxDW_area));
@@ -397,7 +443,7 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
                 printful_catalog_product_id: selectedProduct.printful_catalog_product_id,
                 variant_id: parseInt(selectedProduct.printful_variant_id),
                 design_url: form.image_url,
-                placement: pos.placement,
+                placement: effectivePlacement,
                 area_width: AREA_W, area_height: AREA_H,
                 design_width: dW, design_height: dH,
                 position_top: posTop, position_left: posLeft,
@@ -487,7 +533,8 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent style={{ background: "var(--admin-sidebar)", border: "1px solid var(--admin-border)" }}>
-                                {PLACEMENTS.map((p) => <SelectItem key={p.value} value={p.value} className="text-white text-xs">{p.label}</SelectItem>)}
+                                {(availablePlacements.length > 0 ? availablePlacements : [{ value: pos.placement, label: PLACEMENT_LABELS[pos.placement] ?? pos.placement }])
+                                    .map((p) => <SelectItem key={p.value} value={p.value} className="text-white text-xs">{p.label}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     </div>
@@ -509,12 +556,17 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
 
             <div className="space-y-2">
                 <Button
-                    disabled={!selectedProduct?.printful_catalog_product_id || !form.image_url || isGenerating || imgRatio === null}
+                    disabled={!selectedProduct?.printful_catalog_product_id || !form.image_url || isGenerating || imgRatio === null || tplPending || noTemplates || tplError}
                     onClick={handleGenerate}
                     size="sm"
-                    style={{ background: isGenerating || imgRatio === null ? "var(--admin-border)" : "var(--admin-accent)", color: "white" }}>
-                    {isGenerating ? "Génération en cours…" : imgRatio === null ? "Chargement image…" : "Générer l'aperçu Printful ↗"}
+                    style={{ background: isGenerating || tplPending || noTemplates || imgRatio === null ? "var(--admin-border)" : "var(--admin-accent)", color: "white" }}>
+                    {isGenerating ? "Génération en cours…" : tplPending ? "Chargement template…" : imgRatio === null ? "Chargement image…" : "Générer l'aperçu Printful ↗"}
                 </Button>
+                {(noTemplates || tplError) && (
+                    <p className="text-xs text-red-400">
+                        Aucun template trouvé pour ce produit — vérifiez les logs backend (product_id / placements).
+                    </p>
+                )}
                 {genError && <p className="text-xs text-red-400">{genError}</p>}
                 {!selectedProduct?.printful_catalog_product_id && selectedId && (
                     <p className="text-xs text-yellow-400">Ce produit n'a pas de catalogue Printful ID. Re-importez-le depuis "Catalogue Printful".</p>

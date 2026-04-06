@@ -239,6 +239,26 @@ async def get_mockup_templates(
     return resp.json()
 
 
+async def get_printfiles(
+    api_key: str,
+    product_id: int | str,
+    store_id: int | None = None,
+) -> dict[str, Any]:
+    """GET /mockup-generator/printfiles/{product_id} — fichiers d'impression disponibles.
+
+    Retourne entre autres :
+    - available_placements : { "default": "Print file", "front": "Front", ... }
+    - printfiles           : liste des printfiles avec dimensions
+    """
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(
+            f"{PRINTFUL_BASE_URL}/mockup-generator/printfiles/{product_id}",
+            headers=_store_header(api_key, store_id),
+        )
+    _raise_for_printful(resp)
+    return resp.json()
+
+
 async def create_mockup_task(
     api_key: str,
     product_id: int | str,

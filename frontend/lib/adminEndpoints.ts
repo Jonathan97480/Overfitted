@@ -525,7 +525,7 @@ const adminApiExtended = adminApi.injectEndpoints({
         >({
             query: (body) => ({ url: "/catalog/generate-mockup", method: "POST", body }),
         }),
-        getMockupTemplates: build.query<{ templates: PrintfulTemplate[] }, number>({
+        getMockupTemplates: build.query<{ templates: PrintfulTemplate[]; available_placements: Record<string, string> }, number>({
             query: (productId) => `/catalog/mockup-templates/${productId}`,
         }),
     }),

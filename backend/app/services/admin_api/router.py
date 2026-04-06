@@ -798,6 +798,7 @@ async def get_mockup_templates_route(product_id: int, db: DBDep) -> dict:
     """
     from app.services.printful.client import (
         get_mockup_templates,
+        get_printfiles,
         resolve_api_key,
         resolve_store_id,
     )
@@ -810,12 +811,59 @@ async def get_mockup_templates_route(product_id: int, db: DBDep) -> dict:
     store_id = await resolve_store_id(api_key, db)
 
     try:
-        result = await get_mockup_templates(api_key, product_id, store_id)
+        result, printfiles_result = await asyncio.gather(
+            get_mockup_templates(api_key, product_id, store_id),
+            get_printfiles(api_key, product_id, store_id),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
 
-    templates = result.get("result", {}).get("templates", [])
-    return {"templates": templates}
+    import logging as _log
+    log = _log.getLogger(__name__)
+
+    # available_placements depuis /printfiles => source de vérité pour les placements valides
+    pf_raw = printfiles_result.get("result", {})
+    available_placements: dict[str, str] = pf_raw.get("available_placements", {})
+    # fallback_placement = premier placement valide, ou "default" si inconnu
+    fallback_placement = next(iter(available_placements), "default")
+
+    log.info(
+        f"[mockup-templates] product={product_id} available_placements={available_placements} "
+        f"fallback={fallback_placement}"
+    )
+
+    raw = result.get("result", {})
+
+    # Printful retourne deux structures selon le produit :
+    #
+    # Format A — produit mono-placement (ex. mug) :
+    #   { "result": { "templates": [{template_id, background_url, ...}], ... } }
+    #   → les objets template n'ont PAS de champ "placement"
+    #   → le placement valide vient de available_placements (ex. "default")
+    #
+    # Format B — produit multi-placements (ex. t-shirt) :
+    #   { "result": [ { "placement": "front", "templates": [{...}] }, ... ] }
+    #   → chaque groupe a un champ "placement" et contient ses templates
+
+    flat: list[dict] = []
+
+    if isinstance(raw, list):
+        # Format B : tableau de groupes par placement
+        for group in raw:
+            placement = group.get("placement", fallback_placement)
+            for tpl in group.get("templates", []):
+                flat.append({**tpl, "placement": placement})
+    elif isinstance(raw, dict):
+        # Format A : un seul objet avec une liste "templates"
+        placement = raw.get("placement", fallback_placement)
+        for tpl in raw.get("templates", []):
+            flat.append({**tpl, "placement": tpl.get("placement", placement)})
+
+    log.info(
+        f"[mockup-templates] product={product_id} → {len(flat)} templates, "
+        f"placements={list({t['placement'] for t in flat})}"
+    )
+    return {"templates": flat, "available_placements": available_placements}
 
 
 @router.post("/catalog/generate-mockup", dependencies=[Depends(verify_admin_token)])
