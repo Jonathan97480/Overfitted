@@ -224,6 +224,7 @@ async def create_mockup_task(
     format_: str = "jpg",
     placement: str = "front",
     position: dict[str, int] | None = None,
+    store_id: int | None = None,
 ) -> dict[str, Any]:
     """POST /mockup-generator/create-task/{product_id} — démarre la génération.
 
@@ -245,7 +246,7 @@ async def create_mockup_task(
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(
             f"{PRINTFUL_BASE_URL}/mockup-generator/create-task/{product_id}",
-            headers=_headers(api_key),
+            headers=_store_header(api_key, store_id),
             json=payload,
         )
     _raise_for_printful(resp)
@@ -255,6 +256,7 @@ async def create_mockup_task(
 async def get_mockup_task(
     api_key: str,
     task_key: str,
+    store_id: int | None = None,
 ) -> dict[str, Any]:
     """GET /mockup-generator/task?task_key=... — poll jusqu'à completed.
 
@@ -264,7 +266,7 @@ async def get_mockup_task(
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(
             f"{PRINTFUL_BASE_URL}/mockup-generator/task",
-            headers=_headers(api_key),
+            headers=_store_header(api_key, store_id),
             params={"task_key": task_key},
         )
     _raise_for_printful(resp)

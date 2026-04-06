@@ -9,7 +9,9 @@ import {
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
     useGenerateMockupMutation,
+    useListCatalogueQuery,
     type ProductOut,
+    type CatalogueItemOut,
     type ImageProcessResult,
 } from "@/lib/adminEndpoints";
 import {
@@ -28,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit, Trash2, Plus, Upload, CheckCircle, AlertCircle, ImageIcon, RefreshCw, BookOpen } from "lucide-react";
 import { PrintfulCatalogModal } from "./PrintfulCatalogModal";
+import { assetUrl } from "@/lib/utils";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -118,10 +121,12 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
 // ── Étape 2 — Image ─────────────────────────────────────────────────────────
 function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
     const fileRef = useRef<HTMLInputElement>(null);
+    const [tab, setTab] = useState<"catalogue" | "upload">("catalogue");
     const [uploadImage] = useUploadCatalogueImageMutation();
     const [processImage] = useProcessCatalogueImageMutation();
     const [processing, setProcessing] = useState<string | null>(null);
     const [processResult, setProcessResult] = useState<ImageProcessResult | null>(null);
+    const { data: catalogueItems, isLoading: catalogueLoading } = useListCatalogueQuery({ limit: 100 });
 
     const handleFile = async (file: File) => {
         setProcessing("Chargement…");
@@ -147,60 +152,140 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
         } catch { /* ignore */ } finally { setProcessing(null); }
     };
 
+    const pickFromCatalogue = (item: CatalogueItemOut) => {
+        setForm({ ...form, image_url: assetUrl(item.image_url), dpi: 300, print_ready: true });
+    };
+
     return (
-        <div className="space-y-4">
-            <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-[var(--admin-accent)] transition-colors"
-                style={{ borderColor: "var(--admin-border)" }}
-                onClick={() => fileRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    const file = e.dataTransfer.files[0];
-                    if (file) {
-                        if (fileRef.current) { const dt = new DataTransfer(); dt.items.add(file); fileRef.current.files = dt.files; }
-                        handleFile(file);
-                    }
-                }}>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-                {form.image_url ? (
-                    <div className="flex flex-col items-center gap-2">
-                        <img src={form.image_url} alt="" className="h-32 object-contain rounded" />
-                        <p className="text-xs text-[var(--admin-muted-2)]">Cliquer pour changer</p>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center gap-2 text-[var(--admin-muted-2)]">
-                        <ImageIcon size={32} />
-                        <p className="text-sm">Glisser-déposer ou cliquer</p>
-                        <p className="text-xs">JPG, PNG, WEBP — max 10 Mo</p>
-                    </div>
-                )}
+        <div className="space-y-3">
+            {/* Onglets */}
+            <div className="flex gap-1 p-1 rounded" style={{ background: "var(--admin-bg-2)" }}>
+                <button
+                    onClick={() => setTab("catalogue")}
+                    className="flex-1 text-xs py-1.5 rounded transition-colors"
+                    style={{
+                        background: tab === "catalogue" ? "var(--admin-accent)" : "transparent",
+                        color: tab === "catalogue" ? "#000" : "var(--admin-muted-2)",
+                        fontWeight: tab === "catalogue" ? 600 : 400,
+                    }}>
+                    Catalogue du site
+                </button>
+                <button
+                    onClick={() => setTab("upload")}
+                    className="flex-1 text-xs py-1.5 rounded transition-colors"
+                    style={{
+                        background: tab === "upload" ? "var(--admin-accent)" : "transparent",
+                        color: tab === "upload" ? "#000" : "var(--admin-muted-2)",
+                        fontWeight: tab === "upload" ? 600 : 400,
+                    }}>
+                    Uploader un fichier
+                </button>
             </div>
-            {form.image_url && (
-                <div className="flex gap-2 flex-wrap">
-                    <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(false)}
-                        style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
-                        <Upload size={14} className="mr-1" /> Upscale 300 DPI
-                    </Button>
-                    <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(true)}
-                        style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
-                        <Upload size={14} className="mr-1" /> Supprimer fond
-                    </Button>
+
+            {tab === "catalogue" && (
+                <div className="space-y-3">
+                    {catalogueLoading && <p className="text-xs text-[var(--admin-muted-2)] animate-pulse">Chargement du catalogue…</p>}
+                    {!catalogueLoading && (!catalogueItems || catalogueItems.length === 0) && (
+                        <p className="text-xs text-[var(--admin-muted-2)]">Aucun design dans le catalogue.</p>
+                    )}
+                    {catalogueItems && catalogueItems.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                            {catalogueItems.filter(i => i.image_url).map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => pickFromCatalogue(item)}
+                                    className="relative rounded overflow-hidden border-2 transition-all"
+                                    style={{
+                                        borderColor: form.image_url === assetUrl(item.image_url) ? "var(--admin-accent)" : "var(--admin-border)",
+                                        background: "var(--admin-bg-2)",
+                                    }}>
+                                    <img src={assetUrl(item.image_url)} alt={item.title} className="w-full h-24 object-contain p-1" />
+                                    <p className="text-[10px] text-center pb-1 px-1 truncate" style={{ color: "var(--admin-muted-2)" }}>
+                                        {item.title}
+                                    </p>
+                                    {form.image_url === item.image_url && (
+                                        <div className="absolute top-1 right-1">
+                                            <CheckCircle size={14} className="text-green-400" />
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {form.image_url && (
+                        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
+                            style={{ background: "#22C55E18", border: "1px solid #22C55E" }}>
+                            <CheckCircle size={14} className="text-green-400" />
+                            <span style={{ color: "#22C55E" }}>Design sélectionné — déjà traité, prêt pour impression</span>
+                        </div>
+                    )}
                 </div>
             )}
-            {processing && <p className="text-xs text-[var(--admin-accent)] animate-pulse">{processing}</p>}
-            {form.dpi !== null && (
-                <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
-                    style={{ background: form.print_ready ? "#22C55E18" : "#EF444418", border: `1px solid ${form.print_ready ? "#22C55E" : "#EF4444"}` }}>
-                    {form.print_ready ? <CheckCircle size={14} className="text-green-400" /> : <AlertCircle size={14} className="text-red-400" />}
-                    <span style={{ color: form.print_ready ? "#22C55E" : "#EF4444" }}>
-                        {form.dpi} DPI — {form.print_ready ? "Prêt pour impression" : "Résolution insuffisante (min 300 DPI)"}
-                    </span>
-                    {processResult && (
-                        <span className="ml-2 text-[var(--admin-muted-2)]">
-                            {processResult.bg_removed && "• fond supprimé "}
-                            {processResult.upscaled && "• upscalé"}
-                        </span>
+
+            {tab === "upload" && (
+                <div className="space-y-3">
+                    <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-[var(--admin-accent)] transition-colors"
+                        style={{ borderColor: "var(--admin-border)" }}
+                        onClick={() => fileRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            const file = e.dataTransfer.files[0];
+                            if (file) {
+                                if (fileRef.current) { const dt = new DataTransfer(); dt.items.add(file); fileRef.current.files = dt.files; }
+                                handleFile(file);
+                            }
+                        }}>
+                        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                        {form.image_url ? (
+                            <div className="flex flex-col items-center gap-2">
+                                <img src={form.image_url} alt="" className="h-32 object-contain rounded" />
+                                <p className="text-xs text-[var(--admin-muted-2)]">Cliquer pour changer</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center gap-2 text-[var(--admin-muted-2)]">
+                                <ImageIcon size={32} />
+                                <p className="text-sm">Glisser-déposer ou cliquer</p>
+                                <p className="text-xs">JPG, PNG, WEBP — max 10 Mo</p>
+                            </div>
+                        )}
+                    </div>
+                    {form.image_url && (
+                        <div className="flex gap-2 flex-wrap">
+                            <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(false)}
+                                style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
+                                <Upload size={14} className="mr-1" /> Upscale 300 DPI
+                            </Button>
+                            <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(true)}
+                                style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
+                                <Upload size={14} className="mr-1" /> Supprimer fond
+                            </Button>
+                        </div>
+                    )}
+                    {processing && <p className="text-xs text-[var(--admin-accent)] animate-pulse">{processing}</p>}
+                    {form.dpi !== null && (
+                        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
+                            style={{
+                                background: form.print_ready ? "#22C55E18" : "#F59E0B18",
+                                border: `1px solid ${form.print_ready ? "#22C55E" : "#F59E0B40"}`,
+                            }}>
+                            {form.print_ready
+                                ? <CheckCircle size={14} className="text-green-400" />
+                                : <AlertCircle size={14} style={{ color: "#F59E0B" }} />}
+                            <span style={{ color: form.print_ready ? "#22C55E" : "#F59E0B" }}>
+                                {form.dpi} DPI —{" "}
+                                {form.print_ready
+                                    ? "Prêt pour impression"
+                                    : "Résolution faible — utilisez « Upscale 300 DPI » ci-dessus"}
+                            </span>
+                            {processResult && (
+                                <span className="ml-2 text-[var(--admin-muted-2)]">
+                                    {processResult.bg_removed && "• fond supprimé "}
+                                    {processResult.upscaled && "• upscalé"}
+                                </span>
+                            )}
+                        </div>
                     )}
                 </div>
             )}

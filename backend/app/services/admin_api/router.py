@@ -804,12 +804,26 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
         create_mockup_task,
         get_mockup_task,
         resolve_api_key,
+        resolve_store_id,
     )
 
     try:
         api_key = await resolve_api_key(db)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+    store_id = await resolve_store_id(api_key, db)
+
+    # Réécrire l'URL locale en URL publique pour que Printful puisse y accéder
+    design_url = body.design_url
+    public_base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    if public_base:
+        import re as _re
+        design_url = _re.sub(
+            r"https?://localhost(:\d+)?",
+            public_base,
+            design_url,
+        )
 
     # Construire la position optionnelle
     position: dict | None = None
@@ -828,9 +842,10 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
             api_key=api_key,
             product_id=body.printful_catalog_product_id,
             variant_ids=[body.variant_id],
-            image_url=body.design_url,
+            image_url=design_url,
             placement=body.placement,
             position=position,
+            store_id=store_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
@@ -844,7 +859,7 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
     for _ in range(15):
         await asyncio.sleep(2)
         try:
-            result = await get_mockup_task(api_key, task_key)
+            result = await get_mockup_task(api_key, task_key, store_id)
         except ValueError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 

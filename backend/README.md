@@ -11,7 +11,7 @@ Ce dossier contient l’API FastAPI, la logique métier, et les services asynchr
 ## Initialisation rapide
 1. `python -m venv .venv && source .venv/bin/activate`
 2. `pip install -r requirements.txt`
-3. `uvicorn app.main:app --reload`
+3. `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 
 ---
 
