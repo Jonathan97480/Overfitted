@@ -15,4 +15,15 @@ Ce dossier contient l’API FastAPI, la logique métier, et les services asynchr
 
 ---
 
+## Catalogue Printful
+
+| Endpoint | API utilisée | Produits |
+|----------|-------------|----------|
+| Listing catalogue (`GET /api/admin/catalog`) | **v2** `/v2/catalog-products` | 469+ (EU + US) |
+| Détail produit + variants + prix (`GET /api/admin/catalog/{id}`) | **v1** `/products/{id}` | idem |
+
+La recherche catalogue (ex: Stanley/Stella STSU178) utilise l'API **v2** qui couvre l'ensemble du catalogue global (vs 98 produits US-only en v1). La pagination s'appuie sur `paging.total` retourné par v2. La recherche est effectuée côté serveur après fetch complet des pages.
+
+---
+
 > Pour conventions, voir .github/copilot-instructions.md et PROJECT_CONTEXT.md

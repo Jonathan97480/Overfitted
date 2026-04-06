@@ -495,29 +495,46 @@ async def update_order_status(order_id: int, body: OrderStatusUpdate, db: DBDep)
 
 # ─── Products ──────────────────────────────────────────────────────────────
 
+def _compute_price_ttc(design_price_ht: float, printful_cost_ht: float, shop_margin_rate: float, tva_rate: float) -> float:
+    """Prix TTC = (design_price_ht + printful_cost_ht) × (1 + marge) × (1 + TVA), arrondi au centime."""
+    base_ht = design_price_ht + printful_cost_ht
+    price_ht = base_ht * (1 + shop_margin_rate)
+    return round(price_ht * (1 + tva_rate), 2)
+
+
 class ProductOut(BaseModel):
     id: int
     name: str
     printful_variant_id: str
-    price: float
     category: Optional[str]
     image_url: Optional[str] = None
+    design_price_ht: float
+    printful_cost_ht: float
+    shop_margin_rate: float
+    tva_rate: float
+    price: float  # TTC calculé
     model_config = {"from_attributes": True}
 
 
 class ProductCreate(BaseModel):
     name: str
     printful_variant_id: str
-    price: float
     category: Optional[str] = None
     image_url: Optional[str] = None
+    design_price_ht: float = 0.0
+    printful_cost_ht: float = 0.0
+    shop_margin_rate: float = 0.30
+    tva_rate: float = 0.20
 
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
-    price: Optional[float] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
+    design_price_ht: Optional[float] = None
+    printful_cost_ht: Optional[float] = None
+    shop_margin_rate: Optional[float] = None
+    tva_rate: Optional[float] = None
 
 
 @router.get("/products", response_model=list[ProductOut], dependencies=[Depends(verify_admin_token)])
@@ -528,7 +545,12 @@ async def list_products(db: DBDep):
 
 @router.post("/products", response_model=ProductOut, status_code=201, dependencies=[Depends(verify_admin_token)])
 async def create_product(body: ProductCreate, db: DBDep):
-    product = Product(**body.model_dump())
+    data = body.model_dump()
+    data["price"] = _compute_price_ttc(
+        data["design_price_ht"], data["printful_cost_ht"],
+        data["shop_margin_rate"], data["tva_rate"],
+    )
+    product = Product(**data)
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -542,6 +564,11 @@ async def update_product(product_id: int, body: ProductUpdate, db: DBDep):
         raise HTTPException(status_code=404, detail="Produit introuvable.")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
+    # Recalcul du prix TTC à chaque mise à jour des composantes
+    product.price = _compute_price_ttc(
+        product.design_price_ht, product.printful_cost_ht,
+        product.shop_margin_rate, product.tva_rate,
+    )
     await db.commit()
     await db.refresh(product)
     return product
@@ -555,6 +582,228 @@ async def delete_product(product_id: int, db: DBDep):
     await db.delete(product)
     await db.commit()
     return {"deleted": product_id}
+
+
+@router.post("/products/sync-printful", dependencies=[Depends(verify_admin_token)])
+async def sync_products_from_printful(db: DBDep) -> dict:
+    """Synchronise le catalogue Printful → table `products` locale.
+
+    - Pagine automatiquement l'intégralité du store Printful (limit=100)
+    - Upsert par `printful_variant_id` (clé unique = ID du sync_variant)
+    - Nouveaux variants : créés avec les valeurs par défaut (design_price_ht=0, margin=30%, TVA=20%)
+    - Variants existants : `name`, `image_url` et `printful_cost_ht` mis à jour, `price` recalculé
+      (design_price_ht, shop_margin_rate, tva_rate configurés par l'admin sont préservés)
+
+    Retourne { synced: N, updated: M } où synced = nouveaux, updated = modifiés.
+    """
+    from app.services.printful.client import (
+        get_store_product,
+        list_store_products,
+        resolve_api_key,
+        resolve_store_id,
+    )
+
+    try:
+        api_key = await resolve_api_key(db)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=f"Clé API Printful manquante : {exc}")
+
+    store_id = await resolve_store_id(api_key, db)
+    if store_id is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "PRINTFUL_STORE_ID non configuré. "
+                "Accédez à Paramètres > Printful pour entrer votre Store ID. "
+                "Vous pouvez le trouver dans votre dashboard Printful : "
+                "sélectionnez votre store et regardez l'URL ou Settings > Stores."
+            ),
+        )
+
+    synced = 0
+    updated = 0
+    offset = 0
+    limit = 100
+
+    while True:
+        try:
+            page = await list_store_products(api_key, offset=offset, limit=limit, store_id=store_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=f"Erreur Printful : {exc}")
+
+        items = page.get("result", [])
+        if not items:
+            break
+
+        for sync_product in items:
+            try:
+                detail = await get_store_product(api_key, sync_product["id"], store_id=store_id)
+            except ValueError:
+                continue  # produit inaccessible ou ignoré — on passe
+
+            result = detail.get("result", {})
+            sp = result.get("sync_product", {})
+            thumbnail = sp.get("thumbnail_url")
+            variants = result.get("sync_variants", [])
+
+            for variant in variants:
+                variant_id = str(variant["id"])
+                printful_cost = float(variant.get("retail_price") or 0)
+                raw_name = variant.get("name", "")
+                product_name = (
+                    f"{sync_product['name']} — {raw_name}" if raw_name else sync_product["name"]
+                )
+
+                existing = (await db.execute(
+                    select(Product).where(Product.printful_variant_id == variant_id)
+                )).scalar_one_or_none()
+
+                if existing:
+                    existing.name = product_name
+                    existing.image_url = thumbnail
+                    existing.printful_cost_ht = printful_cost
+                    existing.price = _compute_price_ttc(
+                        existing.design_price_ht, printful_cost,
+                        existing.shop_margin_rate, existing.tva_rate,
+                    )
+                    updated += 1
+                else:
+                    db.add(Product(
+                        name=product_name,
+                        printful_variant_id=variant_id,
+                        image_url=thumbnail,
+                        printful_cost_ht=printful_cost,
+                        price=_compute_price_ttc(0.0, printful_cost, 0.30, 0.20),
+                    ))
+                    synced += 1
+
+        paging = page.get("paging", {})
+        total = paging.get("total", 0)
+        offset += limit
+        if offset >= total:
+            break
+
+    await db.commit()
+    return {"synced": synced, "updated": updated}
+
+
+# ─── Catalogue Printful (parcourir + ajouter au store) ─────────────────────
+
+@router.get("/printful/catalog", dependencies=[Depends(verify_admin_token)])
+async def printful_catalog_list(
+    db: DBDep,
+    offset: int = 0,
+    limit: int = 20,
+    category_id: Optional[int] = None,
+    search: Optional[str] = None,
+) -> dict:
+    """Liste le catalogue complet Printful (tous les produits disponibles).
+
+    Retourne { result: [...], paging: {...} }
+    Quand `search` est fourni, parcourt toutes les pages du catalogue pour ne rien manquer.
+    """
+    from app.services.printful.client import list_catalog_products, resolve_api_key
+    try:
+        api_key = await resolve_api_key(db)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    if search:
+        # Parcourir TOUTES les pages du catalogue pour la recherche
+        # L'API v2 retourne paging.total correctement (469+ produits)
+        q = search.lower()
+        all_products: list = []
+        page_offset = 0
+        page_limit = 100
+        total_known = 0
+        while True:
+            try:
+                page = await list_catalog_products(
+                    api_key, offset=page_offset, limit=page_limit, category_id=category_id
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            results = page.get("result", [])
+            all_products.extend(results)
+            total_known = page.get("paging", {}).get("total", 0)
+            page_offset += len(results)
+            # Stopper si page incomplète ou pages épuisées
+            if not results or len(results) < page_limit or (total_known > 0 and page_offset >= total_known):
+                break
+        filtered = [
+            p for p in all_products
+            if q in (p.get("model", "") or "").lower()
+            or q in (p.get("type_name", "") or "").lower()
+            or q in (p.get("name", "") or "").lower()
+            or q in (p.get("brand", "") or "").lower()
+            or q in (p.get("title", "") or "").lower()
+        ]
+        return {"result": filtered, "paging": {"total": len(filtered), "offset": 0, "limit": len(filtered)}}
+
+    try:
+        data = await list_catalog_products(api_key, offset=offset, limit=limit, category_id=category_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return data
+
+
+@router.get("/printful/catalog/{product_id}", dependencies=[Depends(verify_admin_token)])
+async def printful_catalog_product_detail(product_id: int, db: DBDep) -> dict:
+    """Détail d'un produit catalogue Printful avec ses variants (tailles/couleurs/prix)."""
+    from app.services.printful.client import get_catalog_product, resolve_api_key
+    try:
+        api_key = await resolve_api_key(db)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    try:
+        return await get_catalog_product(api_key, product_id)
+    except ValueError as exc:
+        status_code = 404 if "404" in str(exc) else 502
+        raise HTTPException(status_code=status_code, detail=str(exc))
+
+
+class VariantInfo(BaseModel):
+    id: int
+    name: str   # ex: "Black / S"
+    price: str  # coût Printful HT
+
+
+class AddToStoreRequest(BaseModel):
+    name: str
+    variants: List[VariantInfo]  # variants catalogue sélectionnés (avec détails)
+    thumbnail: Optional[str] = None
+
+
+@router.post("/printful/store-products", dependencies=[Depends(verify_admin_token)])
+async def add_printful_product_to_store(body: AddToStoreRequest, db: DBDep) -> dict:
+    """Sauvegarde les variants du catalogue Printful en DB locale.
+
+    Chaque variant est sauvegardé avec son propre prix Printful.
+    Le prix TTC est calculé individuellement via _compute_price_ttc.
+    """
+    synced = 0
+
+    for variant in body.variants:
+        variant_id_str = str(variant.id)
+        printful_cost = float(variant.price) if variant.price else 0.0
+        product_name = f"{body.name} — {variant.name}" if variant.name else body.name
+
+        existing = (await db.execute(
+            select(Product).where(Product.printful_variant_id == variant_id_str)
+        )).scalar_one_or_none()
+
+        if not existing:
+            db.add(Product(
+                name=product_name,
+                printful_variant_id=variant_id_str,
+                image_url=body.thumbnail,
+                printful_cost_ht=printful_cost,
+                price=_compute_price_ttc(0.0, printful_cost, 0.30, 0.20),
+            ))
+            synced += 1
+
+    await db.commit()
+    return {"store_product_id": None, "synced": synced}
 
 
 # ─── Catalogue (créations boutique admin) ──────────────────────────────────
@@ -941,6 +1190,7 @@ _SETTINGS_KEYS = [
     ("STRIPE_SECRET_KEY", "Stripe Secret Key"),
     ("STRIPE_WEBHOOK_SECRET", "Stripe Webhook Secret"),
     ("PRINTFUL_API_KEY", "Printful API Key"),
+    ("PRINTFUL_STORE_ID", "Printful Store ID"),
     ("OPENAI_API_KEY", "OpenAI API Key"),
     ("ADMIN_PASSWORD", "Admin Password"),
     ("ADMIN_JWT_SECRET", "Admin JWT Secret"),
@@ -1049,7 +1299,7 @@ async def test_service(service: str, db: DBDep):
                 if not key:
                     return ServiceTestResult(service="printful", ok=False, message="PRINTFUL_API_KEY non définie.")
                 resp = await client.get(
-                    "https://api.printful.com/store",
+                    "https://api.printful.com/stores",
                     headers={"Authorization": f"Bearer {key}"},
                 )
                 ok = resp.status_code == 200

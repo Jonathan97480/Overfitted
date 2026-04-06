@@ -54,9 +54,46 @@ export interface ProductOut {
     id: number;
     name: string;
     printful_variant_id: string;
-    price: number;
     category: string | null;
     image_url: string | null;
+    /** Prix HT du design (travail créatif) */
+    design_price_ht: number;
+    /** Coût HT Printful = article + impression */
+    printful_cost_ht: number;
+    /** Taux de marge boutique (ex: 0.30 = 30%) */
+    shop_margin_rate: number;
+    /** Taux TVA (ex: 0.20 = 20%) */
+    tva_rate: number;
+    /** Prix TTC calculé = (design + printful) × (1+marge) × (1+TVA) */
+    price: number;
+}
+
+export interface PrintfulCatalogProduct {
+    id: number;
+    type: string;
+    type_name: string;  // v1: ex. "T-Shirt" | v2: copie de name
+    name: string;       // v2: nom complet ex. "Unisex Hoodie | Stanley/Stella STSU177"
+    brand: string;
+    model: string;
+    image: string;
+    variant_count: number;
+}
+
+export interface PrintfulCatalogVariant {
+    id: number;
+    product_id: number;
+    name: string;
+    size: string;
+    color: string;
+    color_code: string;
+    color_code2: string | null;
+    price: string;
+    in_stock: boolean;
+}
+
+export interface PrintfulCatalogProductDetail {
+    product: PrintfulCatalogProduct;
+    variants: PrintfulCatalogVariant[];
 }
 
 export type CatalogueStatus = "draft" | "active" | "archived";
@@ -292,14 +329,23 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         createProduct: build.mutation<
             ProductOut,
-            Omit<ProductOut, "id">
+            Omit<ProductOut, "id" | "price">
         >({
             query: (body) => ({ url: "/products", method: "POST", body }),
             invalidatesTags: ["Product"],
         }),
         updateProduct: build.mutation<
             ProductOut,
-            { id: number; name?: string; price?: number; category?: string | null; image_url?: string | null }
+            {
+                id: number;
+                name?: string;
+                category?: string | null;
+                image_url?: string | null;
+                design_price_ht?: number;
+                printful_cost_ht?: number;
+                shop_margin_rate?: number;
+                tva_rate?: number;
+            }
         >({
             query: ({ id, ...body }) => ({
                 url: `/products/${id}`,
@@ -310,6 +356,10 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         deleteProduct: build.mutation<{ deleted: number }, number>({
             query: (id) => ({ url: `/products/${id}`, method: "DELETE" }),
+            invalidatesTags: ["Product"],
+        }),
+        syncPrintfulProducts: build.mutation<{ synced: number; updated: number }, void>({
+            query: () => ({ url: "/products/sync-printful", method: "POST" }),
             invalidatesTags: ["Product"],
         }),
 
@@ -423,6 +473,29 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: ({ days = 30 } = {}) => `/stats/finance?days=${days}`,
             providesTags: ["Stats"],
         }),
+
+        // Catalogue Printful (parcourir + ajouter au store)
+        browsePrintfulCatalog: build.query<
+            { result: PrintfulCatalogProduct[]; paging?: { total: number; offset: number; limit: number } },
+            { offset?: number; limit?: number; search?: string; category_id?: number }
+        >({
+            query: ({ offset = 0, limit = 20, search, category_id } = {}) => {
+                const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+                if (search) params.set("search", search);
+                if (category_id !== undefined) params.set("category_id", String(category_id));
+                return `/printful/catalog?${params.toString()}`;
+            },
+        }),
+        getPrintfulCatalogProduct: build.query<{ result: PrintfulCatalogProductDetail }, number>({
+            query: (id) => `/printful/catalog/${id}`,
+        }),
+        addPrintfulProductToStore: build.mutation<
+            { store_product_id: number | null; synced: number },
+            { name: string; variants: { id: number; name: string; price: string }[]; thumbnail?: string }
+        >({
+            query: (body) => ({ url: "/printful/store-products", method: "POST", body }),
+            invalidatesTags: ["Product"],
+        }),
     }),
 });
 
@@ -441,6 +514,7 @@ export const {
     useCreateProductMutation,
     useUpdateProductMutation,
     useDeleteProductMutation,
+    useSyncPrintfulProductsMutation,
     useListCatalogueQuery,
     useCreateCatalogueItemMutation,
     useUpdateCatalogueItemMutation,
@@ -460,4 +534,7 @@ export const {
     useGetTrafficStatsQuery,
     useGetProductsStatsQuery,
     useGetFinanceStatsQuery,
+    useBrowsePrintfulCatalogQuery,
+    useGetPrintfulCatalogProductQuery,
+    useAddPrintfulProductToStoreMutation,
 } = adminApiExtended;
