@@ -7,6 +7,7 @@ from sqladmin import Admin
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from app.database import engine, Base, get_db
 from app.services.fixer.image_utils import validate_and_open_image
@@ -20,7 +21,7 @@ from app.services.printful.router import router as printful_router
 from app.services.contact.router import router as contact_router
 from app.middleware.analytics import AnalyticsMiddleware
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./db.sqlite3")
 
@@ -44,9 +45,12 @@ app.add_middleware(
 )
 
 # --- CORS (outermost — ajouté en dernier, traite TOUTES les réponses) ---
+_raw_origins = os.getenv("FRONTEND_URL", "http://localhost:3000")
+_allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,8 +114,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     avec les headers CORS (le CORSMiddleware de Starlette ne couvre pas
     les exceptions qui remontent hors de la chaîne ASGI)."""
     origin = request.headers.get("origin", "")
-    allowed_origin = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    cors_origin = origin if origin == allowed_origin else ""
+    _raw = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    _allowed = [o.strip() for o in _raw.split(",") if o.strip()]
+    cors_origin = origin if origin in _allowed else ""
     headers = {}
     if cors_origin:
         headers["Access-Control-Allow-Origin"] = cors_origin

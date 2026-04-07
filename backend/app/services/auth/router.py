@@ -1,12 +1,16 @@
 """
 Router auth utilisateurs publics — /auth/*
-- POST /auth/register      → inscription (JWT HttpOnly cookie)
-- POST /auth/login         → connexion (JWT HttpOnly cookie)
-- POST /auth/logout        → supprime le cookie
-- GET  /auth/me            → profil courant
-- PATCH /auth/me           → modifier email / display_name / password
-- GET  /auth/me/export     → export RGPD Art. 15 (JSON)
-- DELETE /auth/me          → anonymisation RGPD Art. 17
+- POST /auth/register           → inscription + envoi email vérification
+- POST /auth/login              → connexion (JWT HttpOnly cookie)
+- POST /auth/logout             → supprime le cookie
+- GET  /auth/me                 → profil courant
+- PATCH /auth/me                → modifier email / display_name / password
+- GET  /auth/me/export          → export RGPD Art. 15 (JSON)
+- DELETE /auth/me               → anonymisation RGPD Art. 17
+- GET  /auth/verify-email       → vérification email via token
+- POST /auth/resend-verification → renvoyer l'email de vérification
+- POST /auth/forgot-password    → demande de reset mot de passe (OWASP-safe)
+- POST /auth/reset-password     → réinitialisation avec token
 """
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ import json
 from datetime import timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,9 +27,13 @@ from app.database import get_db
 from app.models import Design, Invoice, Order, OrderStatus, User
 from app.services.auth.security import (
     create_user_token,
+    create_email_token,
+    decode_email_token,
     get_current_user_id,
     hash_password,
     verify_password,
+    EMAIL_VERIFY_TOKEN_TTL_HOURS,
+    PASSWORD_RESET_TOKEN_TTL_HOURS,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -80,8 +88,8 @@ class PatchMeRequest(BaseModel):
 # ─── Endpoints ─────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=201)
-async def register(body: RegisterRequest, response: Response, db: DBDep):
-    """Inscription — crée un compte et pose le cookie JWT."""
+async def register(body: RegisterRequest, response: Response, background_tasks: BackgroundTasks, db: DBDep):
+    """Inscription — crée un compte et envoie un email de vérification."""
     if len(body.password) < 8:
         raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins 8 caractères.")
 
@@ -103,14 +111,18 @@ async def register(body: RegisterRequest, response: Response, db: DBDep):
         username=username,
         hashed_password=hash_password(body.password),
         display_name=body.display_name,
+        email_verified=0,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    token = create_user_token(user.id, user.email)
-    _set_auth_cookie(response, token)
-    return {"message": "Compte créé.", "user_id": user.id}
+    # Email de vérification en background (non bloquant)
+    token = create_email_token("verify_email", user.id, user.email, EMAIL_VERIFY_TOKEN_TTL_HOURS)
+    from app.services.email.service import send_verification_email
+    background_tasks.add_task(send_verification_email, user.email, user.display_name, token)
+
+    return {"message": "Compte créé. Vérifiez votre email.", "user_id": user.id}
 
 
 @router.post("/login")
@@ -288,3 +300,111 @@ async def delete_me(user_id: UserIdDep, response: Response, db: DBDep):
     await db.commit()
     response.delete_cookie(key=_COOKIE_NAME, path="/")
     return {"message": "Compte anonymisé."}
+
+
+# ─── Vérification email ─────────────────────────────────────────────────────
+
+@router.get("/verify-email")
+async def verify_email(token: str, response: Response, db: DBDep):
+    """Vérifie l'email via token JWT — pose le cookie de session après succès."""
+    payload = decode_email_token(token, "verify_email")
+    user_id = int(payload["sub"])
+    email = payload["email"]
+
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+
+    # Email a changé depuis l'envoi du token ? — token invalidé
+    if user.email != email:
+        raise HTTPException(status_code=400, detail="Lien invalide — l'email a été modifié.")
+
+    if user.email_verified:
+        return {"message": "Email déjà vérifié.", "already_verified": True}
+
+    user.email_verified = 1
+    await db.commit()
+
+    # Pose le cookie de session directement
+    session_token = create_user_token(user.id, user.email)
+    _set_auth_cookie(response, session_token)
+
+    # Email de bienvenue en background
+    from app.services.email.service import send_welcome_email
+    from fastapi import BackgroundTasks
+    # Note : ici on ne peut pas utiliser background_tasks directement dans un GET sans paramètre
+    # On utilise asyncio pour lancer la coroutine en fire-and-forget
+    import asyncio
+    asyncio.ensure_future(send_welcome_email(user.email, user.display_name))
+
+    return {"message": "Email vérifié avec succès.", "user_id": user.id}
+
+
+@router.post("/resend-verification")
+async def resend_verification(background_tasks: BackgroundTasks, user_id: UserIdDep, db: DBDep):
+    """Renvoie un email de vérification si l'email n'est pas encore vérifié."""
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+
+    if user.email_verified:
+        raise HTTPException(status_code=400, detail="Email déjà vérifié.")
+
+    token = create_email_token("verify_email", user.id, user.email, EMAIL_VERIFY_TOKEN_TTL_HOURS)
+    from app.services.email.service import send_verification_email
+    background_tasks.add_task(send_verification_email, user.email, user.display_name, token)
+
+    return {"message": "Email de vérification renvoyé."}
+
+
+# ─── Mot de passe oublié / reset ────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: DBDep):
+    """Envoie un email de reset si l'email existe (message volontairement vague — OWASP)."""
+    user = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
+
+    # Réponse identique que l'email existe ou non (évite l'énumération d'emails OWASP A01)
+    if user and user.is_active and user.hashed_password:
+        token = create_email_token("reset_password", user.id, user.email, PASSWORD_RESET_TOKEN_TTL_HOURS)
+        from app.services.email.service import send_password_reset_email
+        background_tasks.add_task(send_password_reset_email, user.email, user.display_name, token)
+
+    return {"message": "Si cet email est associé à un compte, un lien de réinitialisation vous a été envoyé."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest, response: Response, db: DBDep):
+    """Réinitialise le mot de passe via token JWT."""
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins 8 caractères.")
+
+    payload = decode_email_token(body.token, "reset_password")
+    user_id = int(payload["sub"])
+    email = payload["email"]
+
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+
+    # Email a changé depuis l'envoi du token ? — token invalidé
+    if user.email != email:
+        raise HTTPException(status_code=400, detail="Lien invalide — l'email a été modifié.")
+
+    user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+
+    # Pose le cookie de session directement après reset réussi
+    session_token = create_user_token(user.id, user.email)
+    _set_auth_cookie(response, session_token)
+
+    return {"message": "Mot de passe réinitialisé avec succès. Vous êtes maintenant connecté."}

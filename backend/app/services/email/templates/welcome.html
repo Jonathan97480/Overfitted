@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bienvenue dans le chaos organique — Overfitted.io</title>
+<style>
+  body { margin: 0; padding: 0; background: #0A0A0A; font-family: 'Courier New', monospace; color: #FFFFFF; }
+  .wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+  .header { border-bottom: 1px solid #00F0FF; padding-bottom: 20px; margin-bottom: 30px; }
+  .logo { font-size: 24px; font-weight: bold; color: #FF6B00; letter-spacing: 4px; text-transform: uppercase; }
+  .logo span { color: #00F0FF; }
+  .panel { background: #111827; border: 1px solid #00F0FF; box-shadow: 0 0 12px #00F0FF40; padding: 30px; margin-bottom: 24px; }
+  .panel-title { font-size: 11px; color: #00F0FF; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px; border-bottom: 1px solid #1F2937; padding-bottom: 10px; }
+  .greeting { font-size: 16px; color: #FFFFFF; margin-bottom: 16px; font-weight: bold; }
+  .message { font-size: 13px; color: #AAAAAA; line-height: 1.7; margin-bottom: 24px; }
+  .cta { display: inline-block; background: #FF6B00; color: #FFFFFF; text-decoration: none; padding: 12px 24px; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; font-weight: bold; margin-right: 12px; margin-bottom: 8px; }
+  .cta-ghost { display: inline-block; border: 1px solid #00F0FF; color: #00F0FF; text-decoration: none; padding: 12px 24px; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; }
+  .terminal-line { font-size: 11px; color: #00F0FF; margin: 4px 0; }
+  .terminal-line span { color: #AAAAAA; }
+  .footer { font-size: 10px; color: #444; text-align: center; padding-top: 20px; border-top: 1px solid #1F2937; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="logo">OVER<span>FITTED</span>.IO</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">// WELCOME_TO_THE_CHAOS</div>
+    <div class="terminal-line">STATUS: <span>EMAIL_VERIFIED</span></div>
+    <div class="terminal-line">ACCESS: <span>FULL_CHAOS_UNLOCKED</span></div>
+    <br />
+    <p class="greeting">Bienvenue, {{ display_name }}.</p>
+    <p class="message">
+      Email vérifié. Compte actif. Chaos organique disponible.<br /><br />
+      Tu peux maintenant uploader tes créations, les faire analyser par notre IA sarcastique,
+      et découvrir qu'elles méritent probablement une refonte complète.<br /><br />
+      <em style="color:#FF6B00;">On n'a pas dit que ce serait douloureux. Mais on n'a pas dit l'inverse non plus.</em>
+    </p>
+    <a class="cta" href="{{ upload_url }}">UPLOADER UNE CRÉATION</a>
+    <a class="cta-ghost" href="{{ shop_url }}">VOIR LE SHOP</a>
+  </div>
+
+  <div class="footer">
+    <a href="{{ frontend_url }}" style="color:#00F0FF;">overfitted.io</a> — Critiqué par l'IA. Réparé pour les Humains.
+  </div>
+</div>
+</body>
+</html>

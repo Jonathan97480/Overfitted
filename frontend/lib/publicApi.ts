@@ -45,6 +45,21 @@ export interface AuthMeResponse {
     email: string;
     display_name: string | null;
     role: string;
+    created_at?: string;
+}
+
+export interface PatchMeArg {
+    display_name?: string;
+    email?: string;
+    current_password?: string;
+    new_password?: string;
+}
+
+export interface ExportMeData {
+    user: { id: number; email: string; display_name: string | null; created_at: string };
+    designs: unknown[];
+    orders: unknown[];
+    invoices: unknown[];
 }
 
 // ─── Upload / Fixer / Soul / Roast types ────────────────────────────────────
@@ -76,6 +91,33 @@ export interface AnalyzeRoastArg {
     dpi?: number[] | null;
 }
 
+// ─── Commerce / Orders types ──────────────────────────────────────────────
+
+export interface OrderItem {
+    name: string;
+    qty: number;
+    price?: string;
+}
+
+export type OrderStatus = "pending" | "paid" | "submitted" | "shipped" | "cancelled";
+
+export interface UserOrder {
+    id: number;
+    invoice_number: string | null;
+    status: OrderStatus;
+    created_at: string;
+    amount_ttc: number | null;
+    printful_order_id: string | null;
+    items: OrderItem[];
+}
+
+export interface OrderDetail extends UserOrder {
+    printful_status: string | null;
+    tracking_number: string | null;
+    tracking_url: string | null;
+    estimated_delivery: string | null;
+}
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 export const publicApi = createApi({
@@ -83,7 +125,7 @@ export const publicApi = createApi({
     baseQuery: fetchBaseQuery({
         baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
     }),
-    tagTypes: ["PublicProduct"],
+    tagTypes: ["PublicProduct", "Me"],
     endpoints: (build) => ({
         getPublicProducts: build.query<
             { paging: { total: number; offset: number; limit: number }; result: PublicProduct[] },
@@ -159,6 +201,27 @@ export const publicApi = createApi({
         // Auth — me (current user)
         getMe: build.query<AuthMeResponse, void>({
             query: () => ({ url: "/auth/me", credentials: "include" as RequestCredentials }),
+            providesTags: ["Me"],
+        }),
+
+        // Auth — patch me (display_name, email, password)
+        patchMe: build.mutation<AuthMeResponse, PatchMeArg>({
+            query: (body) => ({
+                url: "/auth/me",
+                method: "PATCH",
+                body,
+                credentials: "include" as RequestCredentials,
+            }),
+            invalidatesTags: ["Me"],
+        }),
+
+        // Auth — delete me (RGPD Art. 17 anonymisation)
+        deleteMe: build.mutation<{ message: string }, void>({
+            query: () => ({
+                url: "/auth/me",
+                method: "DELETE",
+                credentials: "include" as RequestCredentials,
+            }),
         }),
 
         // Auth — logout
@@ -181,6 +244,29 @@ export const publicApi = createApi({
                 body,
             }),
         }),
+
+        // Orders — liste des commandes de l'utilisateur
+        getMyOrders: build.query<UserOrder[], void>({
+            query: () => ({ url: "/commerce/orders", credentials: "include" as RequestCredentials }),
+        }),
+
+        // Orders — détail + statut Printful (polling 60s côté page)
+        getOrderDetail: build.query<OrderDetail, number>({
+            query: (id) => ({ url: `/commerce/order/${id}`, credentials: "include" as RequestCredentials }),
+        }),
+
+        // Checkout — créer une session Stripe Checkout
+        createCheckoutSession: build.mutation<
+            { session_url: string },
+            { items: { variant_id: number; quantity: number }[]; promo_code?: string }
+        >({
+            query: (body) => ({
+                url: "/commerce/checkout/create-session",
+                method: "POST",
+                body,
+                credentials: "include" as RequestCredentials,
+            }),
+        }),
     }),
 });
 
@@ -199,4 +285,9 @@ export const {
     useGetMeQuery,
     useLogoutMutation,
     useValidatePromoMutation,
+    useGetMyOrdersQuery,
+    useGetOrderDetailQuery,
+    usePatchMeMutation,
+    useDeleteMeMutation,
+    useCreateCheckoutSessionMutation,
 } = publicApi;

@@ -471,7 +471,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 ---
 
 ### Pages restantes
-- [ ] **Page `/checkout`** — redirect vers Stripe Checkout hosted avec `session_id` + code promo appliqué
+- [x] **Page `/checkout`** — redirect vers Stripe Checkout hosted avec `session_id` + code promo appliqué
 
 ### Page `/checkout/success` — Confirmation
 - [x] **Vérification `session_id`** → `GET /commerce/checkout/confirm?session_id=xxx`
@@ -509,16 +509,16 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [x] **Middleware** `cartPersistMiddleware` — sync `cartSlice` ↔ `localStorage`
 
 ### Page `/account/orders` — Historique & Suivi commandes
-- [ ] **Tableau** : Date | N° Commande | Produit(s) | Montant TTC | Statut | Facture
-- [ ] **Clic sur une commande** → ouvre `OrderTrackingPanel` (Shadcn Sheet ou page dédiée)
-- [ ] **`OrderTrackingPanel`** — suivi en temps réel :
+- [x] **Tableau** : Date | N° Commande | Produit(s) | Montant TTC | Statut | Facture
+- [x] **Clic sur une commande** → ouvre `OrderTrackingPanel` (Shadcn Sheet ou page dédiée)
+- [x] **`OrderTrackingPanel`** — suivi en temps réel :
   - Timeline verticale avec étapes : Paiement reçu → Préparation → Envoyé chez Printful → En production → Expédié → Livré
   - Étape active mise en évidence (icône colorée + label), étapes futures grisées
   - Statut Printful rafraîchi toutes les 60s via RTK Query polling `GET /commerce/order/{id}`
   - Numéro de tracking transporteur + lien externe quand disponible (`target="_blank"`)
   - Délai de livraison estimé affiché
-- [ ] **Bouton "Télécharger facture"** par ligne → `GET /commerce/invoice/{order_id}` (PDF)
-- [ ] **Accès protégé** — redirect `/login` si non connecté
+- [x] **Bouton "Télécharger facture"** par ligne → `GET /commerce/invoice/{order_id}` (PDF)
+- [x] **Accès protégé** — redirect `/login` si non connecté
 
 ### Page `/account/profile` — Mon compte (RGPD)
 
@@ -547,91 +547,61 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 > Obligatoire (Loi pour la Confiance dans l'Économie Numérique, RGPD Art. 13-14).
 
-- [ ] **Layout** — page statique avec sommaire ancré latéral (sticky sidebar sur desktop)
-- [ ] **Sections obligatoires** :
+- [x] **Layout** — page statique avec sommaire ancré latéral (sticky sidebar sur desktop)
+- [x] **Sections obligatoires** :
   - Éditeur du site (raison sociale, SIRET, adresse, email de contact)
   - Hébergeur
   - Politique de confidentialité : données collectées, durée de conservation, base légale du traitement, DPO contact
   - Droits des utilisateurs : accès, rectification, effacement, portabilité, opposition (avec liens directs vers `/account/profile`)
   - Cookies : liste des cookies utilisés (session, analytics), aucun cookie publicitaire tiers
-  - CGV : conditions de vente, délai de rétractation 14 jours **sauf produits personnalisés (Art. L221-28 12° Code de la consommation)** — à indiquer clairement
-- [ ] **Bilingue** — contenu traduit FR/EN via le système i18n
-- [ ] **Lien dans le footer** de toutes les pages publiques
+  - CGV : conditions de vente, délai de rétractation 14 jours **sauf produits personnalisés (Art. L221-28 12° Code de la consommation)**
+- [~] **Bilingue** — contenu traduit FR/EN via i18n *(différé — i18n non encore implémenté)*
+- [x] **Lien dans le footer** de toutes les pages publiques
 
-### Page `/500` — Erreur serveur ⚠️ manquant
-- [ ] `error.tsx` Next.js : `GlitchText` "500" + `TerminalWindow` `ERROR: SERVER_MELTDOWN // THE_AI_IS_CRYING`
-- [ ] Bouton "RÉESSAYER" (`router.refresh()`) + bouton "RETOUR À LA BASE"
+### Page `/500` — Erreur serveur
+- [x] `error.tsx` Next.js : glitch "500" inline + `TerminalWindow` `ERROR: SERVER_MELTDOWN // THE_AI_IS_CRYING`
+- [x] Bouton "RÉESSAYER" (`reset()` error boundary) + bouton "RETOUR À LA BASE" (`router.push("/")`)
 
 ### Bannière cookies (RGPD) ⚠️ manquant — obligatoire UE
 > La CNIL exige un consentement explicite avant tout dépôt de cookie non essentiel.
-- [ ] **`CookieBanner`** — bandeau bas de page (au-dessus de `PageStatusBar`), affiché au premier chargement si pas de choix stocké
+- [x] **`CookieBanner`** — bandeau bas de page (au-dessus de `PageStatusBar`), affiché au premier chargement si pas de choix stocké
   - Texte court : "On utilise des cookies pour faire fonctionner le site. Pas pour vous espionner — on a des IA pour ça."
   - Boutons : **"Accepter"** (orange) | **"Refuser"** | **"Paramétrer"** (ouvre modal)
   - `CookieSettingsModal` : toggles par catégorie (Fonctionnels ON/grisé | Analytics ON/OFF)
-- [ ] **Stockage consentement** — cookie `ovf_consent` (valeur JSON) + pas de cookie analytics avant acceptation
-- [ ] **Lib** : implémentation custom légère (pas besoin de lib tierce)
+- [x] **Stockage consentement** — cookie `ovf_consent` (valeur JSON) + pas de cookie analytics avant acceptation
+- [x] **Lib** : implémentation custom légère (pas besoin de lib tierce)
 
 ### Page `/404` — Not Found
-- [ ] `GlitchText` "404" énorme orange, sous-titre monospace : `ERROR: PAGE_NOT_FOUND // HUMAN_ERROR_DETECTED`
-- [ ] `TerminalWindow` : `STATUS: 404 | REQUESTED_URL: [path] | SUGGESTION: GO_BACK_HUMAN`
-- [ ] Bouton "RETOUR À LA BASE" → `/`
-- [ ] Animation Framer Motion : glitch en boucle lente (toutes les 4s)
+- [x] `GlitchText` "404" énorme orange, sous-titre monospace : `ERROR: PAGE_NOT_FOUND // HUMAN_ERROR_DETECTED`
+- [x] `TerminalWindow` : `STATUS: 404 | REQUESTED_URL: [path] | SUGGESTION: GO_BACK_HUMAN`
+- [x] Bouton "RETOUR À LA BASE" → `/`
+- [x] Animation Framer Motion : glitch en boucle lente (toutes les 4s)
 
 ---
-- [ ] **Tableau** : Date | N° Commande | Produit(s) | Montant TTC | Statut | Facture
-- [ ] **Clic sur une commande** → ouvre `OrderTrackingPanel` (Shadcn Sheet ou page dédiée)
-- [ ] **`OrderTrackingPanel`** — suivi en temps réel :
+- [x] **Tableau** : Date | N° Commande | Produit(s) | Montant TTC | Statut | Facture
+- [x] **Clic sur une commande** → ouvre `OrderTrackingPanel` (Shadcn Sheet ou page dédiée)
+- [x] **`OrderTrackingPanel`** — suivi en temps réel :
   - Timeline verticale avec étapes : Paiement reçu → Préparation → Envoyé chez Printful → En production → Expédié → Livré
   - Étape active mise en évidence (icône colorée + label), étapes futures grisées
   - Statut Printful rafraîchi toutes les 60s via RTK Query polling `GET /commerce/order/{id}`
   - Numéro de tracking transporteur + lien externe quand disponible (`target="_blank"`)
   - Délai de livraison estimé affiché
-- [ ] **Bouton "Télécharger facture"** par ligne → `GET /commerce/invoice/{order_id}` (PDF)
-- [ ] **Accès protégé** — redirect `/login` si non connecté
+- [x] **Bouton "Télécharger facture"** par ligne → `GET /commerce/invoice/{order_id}` (PDF)
+- [x] **Accès protégé** — redirect `/login` si non connecté
 
 ### Page `/account/profile` — Mon compte (RGPD)
 
-> Conformité RGPD (Règlement UE 2016/679) obligatoire pour tout site à destination d'utilisateurs européens.
-
-- [ ] **Informations personnelles** :
-  - Email affiché + bouton "Modifier l'email" (confirmation par lien envoyé à l'ancien email)
-  - Nom d'affichage optionnel
-  - Changement de mot de passe (ancien + nouveau + confirmation)
-  - Langue préférée (FR/EN) — sélecteur synchronisé avec `i18nSlice`
-- [ ] **Mes données (droit d'accès — Art. 15 RGPD)** :
-  - Bouton **"Télécharger mes données"** → `GET /auth/me/export` — retourne JSON avec toutes les données stockées (email, designs, commandes, factures). Format ZIP si plusieurs fichiers.
-- [ ] **Suppression de compte (droit à l'effacement — Art. 17 RGPD)** :
-  - Bouton **"Supprimer mon compte"** — **grisé + tooltip** si une commande est en cours (statut `pending`, `paid`, ou `submitted`)
-  - Si actif : `AlertDialog` de confirmation avec saisie de l'email pour confirmer + case à cocher "Je comprends que cette action est irréversible"
-  - Action : `DELETE /auth/me` → anonymise les données (email → `deleted_XXXX@overfitted.io`, hash des données personnelles) — les factures sont conservées pour obligations comptables (Art. 17 §3 RGPD)
-  - Déconnexion + redirect `/` après suppression
-- [ ] **Consentements** : affichage de la date d'acceptation des CGV + lien vers `/legal`
-- [ ] **Prérequis backend** :
-  - `GET /auth/me/export` — export JSON données utilisateur
-  - `DELETE /auth/me` — anonymisation compte (pas suppression physique, conservation factures)
-  - `PATCH /auth/me` — modification email/nom/mot de passe
-  - Vérification commandes actives avant autorisation de suppression
+- [x] *(voir occurrence principale ci-dessus)*
 
 ### Page `/legal` — Mentions légales & Politique de confidentialité
 
-> Obligatoire (Loi pour la Confiance dans l'Économie Numérique, RGPD Art. 13-14).
-
-- [ ] **Layout** — page statique avec sommaire ancré latéral (sticky sidebar sur desktop)
-- [ ] **Sections obligatoires** :
-  - Éditeur du site (raison sociale, SIRET, adresse, email de contact)
-  - Hébergeur
-  - Politique de confidentialité : données collectées, durée de conservation, base légale du traitement, DPO contact
-  - Droits des utilisateurs : accès, rectification, effacement, portabilité, opposition (avec liens directs vers `/account/profile`)
-  - Cookies : liste des cookies utilisés (session, analytics), aucun cookie publicitaire tiers
-  - CGV : conditions de vente, délai de rétractation 14 jours
-- [ ] **Bilingue** — contenu traduit FR/EN via le système i18n
-- [ ] **Lien dans le footer** de toutes les pages publiques
+- [x] *(voir occurrence principale ci-dessus)*
 
 ### Page `/404` — Not Found
-- [ ] `GlitchText` "404" énorme orange, sous-titre monospace : `ERROR: PAGE_NOT_FOUND // HUMAN_ERROR_DETECTED`
-- [ ] `TerminalWindow` : `STATUS: 404 | REQUESTED_URL: [path] | SUGGESTION: GO_BACK_HUMAN`
-- [ ] Bouton "RETOUR À LA BASE" → `/`
-- [ ] Animation Framer Motion : glitch en boucle lente (toutes les 4s)
+- [x] `GlitchText` "404" énorme orange, sous-titre monospace : `ERROR: PAGE_NOT_FOUND // HUMAN_ERROR_DETECTED`
+- [x] `TerminalWindow` : `STATUS: 404 | REQUESTED_URL: [path] | SUGGESTION: GO_BACK_HUMAN`
+- [x] Bouton "RETOUR À LA BASE" → `/`
+- [x] Animation Framer Motion : glitch en boucle lente (toutes les 4s)
 
 ---
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Header, Depends, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 import json as _json
 import os
 from datetime import datetime as _dt
@@ -11,10 +11,12 @@ from typing import Annotated
 
 from app.database import get_db
 from app.models import Invoice, Order, OrderStatus, PromoCode
+from app.services.auth.security import get_current_user_id
 from app.services.commerce.client import (
     create_checkout_session,
     verify_webhook,
     create_printful_order,
+    get_printful_order,
 )
 
 router = APIRouter(prefix="/commerce", tags=["commerce"])
@@ -137,6 +139,21 @@ async def webhook(
                     )
                     db.add(inv)
                     await db.commit()
+
+                    # Email de confirmation de commande (fire-and-forget)
+                    import asyncio
+                    from app.services.email.service import send_order_confirmation_email
+                    items_list = [{"name": "Commande Overfitted", "qty": 1, "price": f"{amount_ttc:.2f}"}]
+                    recipient = sess.get("customer_email") or customer_details.get("email", "")
+                    if recipient:
+                        asyncio.ensure_future(send_order_confirmation_email(
+                            to=recipient,
+                            display_name=customer_details.get("name"),
+                            order_id=order.id,
+                            invoice_number=inv.invoice_number,
+                            items=items_list,
+                            amount_ttc=amount_ttc,
+                        ))
 
     return {"received": True, "type": event_type}
 
@@ -270,6 +287,124 @@ async def checkout_confirm(session_id: str = Query(...), db: DBDep = None):
         status=session.payment_status,
         message="Paiement confirmé." if session.payment_status == "paid" else "Paiement en attente.",
     )
+
+
+# ─── User orders ───────────────────────────────────────────────────────────
+
+UserIdDep = Annotated[int, Depends(get_current_user_id)]
+
+
+class OrderItem(BaseModel):
+    name: str
+    qty: int
+    price: Optional[str] = None
+
+
+class UserOrderResponse(BaseModel):
+    id: int
+    invoice_number: Optional[str] = None
+    status: str
+    created_at: str
+    amount_ttc: Optional[float] = None
+    printful_order_id: Optional[str] = None
+    items: List[OrderItem]
+
+
+class OrderDetailResponse(UserOrderResponse):
+    printful_status: Optional[str] = None
+    tracking_number: Optional[str] = None
+    tracking_url: Optional[str] = None
+    estimated_delivery: Optional[str] = None
+
+
+def _serialise_order(order: Order, invoice: Optional[Invoice]) -> dict:
+    items: list = []
+    if invoice and invoice.items_json:
+        try:
+            raw = _json.loads(invoice.items_json)
+            items = [
+                {"name": r.get("description", "Article"), "qty": r.get("quantity", 1), "price": str(r.get("unit_price_ht", ""))}
+                for r in raw
+            ]
+        except Exception:
+            pass
+    return {
+        "id": order.id,
+        "invoice_number": invoice.invoice_number if invoice else None,
+        "status": order.status.value,
+        "created_at": order.created_at.isoformat(),
+        "amount_ttc": invoice.amount_ttc if invoice else None,
+        "printful_order_id": order.printful_order_id,
+        "items": items,
+    }
+
+
+@router.get("/orders", response_model=List[UserOrderResponse])
+async def get_my_orders(current_user_id: UserIdDep, db: DBDep):
+    """Retourne la liste des commandes de l'utilisateur connecté (cookie auth requis)."""
+    result = await db.execute(
+        select(Order).where(Order.user_id == current_user_id).order_by(Order.created_at.desc())
+    )
+    orders = result.scalars().all()
+    if not orders:
+        return []
+
+    order_ids = [o.id for o in orders]
+    inv_result = await db.execute(
+        select(Invoice).where(Invoice.order_id.in_(order_ids))
+    )
+    invoices_by_order = {inv.order_id: inv for inv in inv_result.scalars().all()}
+
+    return [_serialise_order(o, invoices_by_order.get(o.id)) for o in orders]
+
+
+@router.get("/order/{order_id}", response_model=OrderDetailResponse)
+async def get_my_order(order_id: int, current_user_id: UserIdDep, db: DBDep):
+    """Retourne le détail d'une commande + statut Printful live (poll 60 s).
+
+    Vérifie que la commande appartient à l'utilisateur connecté.
+    """
+    order = (await db.execute(
+        select(Order).where(Order.id == order_id)
+    )).scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Commande introuvable.")
+    if order.user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="Accès refusé.")
+
+    invoice = (await db.execute(
+        select(Invoice).where(Invoice.order_id == order.id)
+    )).scalar_one_or_none()
+
+    base = _serialise_order(order, invoice)
+
+    # Enrichissement Printful (best-effort)
+    printful_status = None
+    tracking_number = None
+    tracking_url = None
+    estimated_delivery = None
+
+    if order.printful_order_id:
+        try:
+            pf = get_printful_order(order.printful_order_id)
+            printful_status = pf.get("status")
+            shipments = pf.get("shipments") or []
+            if shipments:
+                first = shipments[0]
+                tracking_number = first.get("tracking_number")
+                tracking_url = first.get("tracking_url")
+                estimated_delivery = first.get("estimated_delivery")
+        except Exception:
+            pass  # Printful indisponible — on ne bloque pas la réponse
+
+    return {
+        **base,
+        "printful_status": printful_status,
+        "tracking_number": tracking_number,
+        "tracking_url": tracking_url,
+        "estimated_delivery": estimated_delivery,
+    }
 
 
 # ─── Invoice PDF ───────────────────────────────────────────────────────────

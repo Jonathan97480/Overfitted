@@ -25,6 +25,7 @@ class User(Base):
     hashed_password = Column(String, nullable=True)   # None pour les comptes legacy sans MDP
     display_name = Column(String, nullable=True)
     is_active = Column(Integer, default=1, nullable=False)   # 1=actif, 0=anonymisé
+    email_verified = Column(Integer, default=0, nullable=False)  # 0=non vérifié, 1=vérifié
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     designs = relationship("Design", back_populates="user", lazy="select")

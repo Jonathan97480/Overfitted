@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Votre commande est en route — Overfitted.io</title>
+<style>
+  body { margin: 0; padding: 0; background: #0A0A0A; font-family: 'Courier New', monospace; color: #FFFFFF; }
+  .wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+  .header { border-bottom: 1px solid #00F0FF; padding-bottom: 20px; margin-bottom: 30px; }
+  .logo { font-size: 24px; font-weight: bold; color: #FF6B00; letter-spacing: 4px; text-transform: uppercase; }
+  .logo span { color: #00F0FF; }
+  .panel { background: #111827; border: 1px solid #00F0FF; box-shadow: 0 0 12px #00F0FF40; padding: 30px; margin-bottom: 24px; }
+  .panel-title { font-size: 11px; color: #00F0FF; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px; border-bottom: 1px solid #1F2937; padding-bottom: 10px; }
+  .terminal-line { font-size: 11px; color: #00F0FF; margin: 4px 0; }
+  .terminal-line span { color: #AAAAAA; }
+  .terminal-line.ok span { color: #22C55E; }
+  .message { font-size: 13px; color: #AAAAAA; line-height: 1.7; margin: 20px 0; }
+  .tracking-box { background: #0d1117; border: 1px solid #00F0FF; padding: 20px; margin: 20px 0; text-align: center; }
+  .tracking-number { font-size: 18px; color: #FF6B00; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
+  .carrier { font-size: 11px; color: #AAAAAA; text-transform: uppercase; letter-spacing: 2px; }
+  .cta { display: block; background: #FF6B00; color: #FFFFFF; text-decoration: none; text-align: center; padding: 14px 28px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; font-weight: bold; margin-top: 20px; }
+  .cta-ghost { display: block; border: 1px solid #00F0FF; color: #00F0FF; text-decoration: none; text-align: center; padding: 12px 28px; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; margin-top: 10px; }
+  .footer { font-size: 10px; color: #444; text-align: center; padding-top: 20px; border-top: 1px solid #1F2937; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="logo">OVER<span>FITTED</span>.IO</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">// SHIPMENT_DISPATCHED</div>
+    <div class="terminal-line ok">STATUS: <span>SHIPPED ✓</span></div>
+    <div class="terminal-line">ORDER_ID: <span>#{{ order_id }}</span></div>
+    <div class="terminal-line">CARRIER: <span>{{ carrier }}</span></div>
+
+    <p class="message">
+      Votre commande a quitté l'entrepôt Printful et est en route vers vous.<br />
+      L'IA a fait sa part. Le chaos organique vous appartient.
+    </p>
+
+    {% if tracking_number %}
+    <div class="tracking-box">
+      <div class="carrier">{{ carrier }} — Numéro de suivi</div>
+      <div class="tracking-number">{{ tracking_number }}</div>
+    </div>
+    {% endif %}
+
+    {% if tracking_url %}
+    <a class="cta" href="{{ tracking_url }}">SUIVRE MON COLIS</a>
+    {% endif %}
+
+    <a class="cta-ghost" href="{{ account_url }}">MON ESPACE COMMANDES</a>
+  </div>
+
+  <div class="footer">
+    <a href="{{ frontend_url }}" style="color:#00F0FF;">overfitted.io</a> — Critiqué par l'IA. Réparé pour les Humains.
+  </div>
+</div>
+</body>
+</html>

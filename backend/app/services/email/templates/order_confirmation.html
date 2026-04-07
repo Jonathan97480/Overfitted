@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Commande confirmée — Overfitted.io</title>
+<style>
+  body { margin: 0; padding: 0; background: #0A0A0A; font-family: 'Courier New', monospace; color: #FFFFFF; }
+  .wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+  .header { border-bottom: 1px solid #00F0FF; padding-bottom: 20px; margin-bottom: 30px; }
+  .logo { font-size: 24px; font-weight: bold; color: #FF6B00; letter-spacing: 4px; text-transform: uppercase; }
+  .logo span { color: #00F0FF; }
+  .panel { background: #111827; border: 1px solid #00F0FF; box-shadow: 0 0 12px #00F0FF40; padding: 30px; margin-bottom: 24px; }
+  .panel-title { font-size: 11px; color: #00F0FF; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px; border-bottom: 1px solid #1F2937; padding-bottom: 10px; }
+  .terminal-line { font-size: 11px; color: #00F0FF; margin: 4px 0; }
+  .terminal-line span { color: #AAAAAA; }
+  .terminal-line.ok span { color: #22C55E; }
+  .message { font-size: 13px; color: #AAAAAA; line-height: 1.7; margin: 20px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }
+  th { text-align: left; color: #00F0FF; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; padding: 8px 0; border-bottom: 1px solid #1F2937; }
+  td { padding: 10px 0; color: #AAAAAA; border-bottom: 1px solid #111; vertical-align: top; }
+  td.name { color: #FFFFFF; }
+  .total-row td { padding-top: 14px; font-weight: bold; color: #FFFFFF; border-top: 1px solid #00F0FF; border-bottom: none; }
+  .total-amount { color: #FF6B00; font-size: 14px; }
+  .cta { display: block; background: #FF6B00; color: #FFFFFF; text-decoration: none; text-align: center; padding: 14px 28px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; font-weight: bold; margin-top: 20px; }
+  .legal { font-size: 10px; color: #555; margin-top: 16px; line-height: 1.6; }
+  .footer { font-size: 10px; color: #444; text-align: center; padding-top: 20px; border-top: 1px solid #1F2937; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="logo">OVER<span>FITTED</span>.IO</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">// ORDER_CONFIRMED</div>
+    <div class="terminal-line ok">STATUS: <span>PAID ✓</span></div>
+    <div class="terminal-line">ORDER_ID: <span>#{{ order_id }}</span></div>
+    {% if invoice_number %}<div class="terminal-line">INVOICE: <span>{{ invoice_number }}</span></div>{% endif %}
+    <div class="terminal-line">PIPELINE: <span>SUBMITTED_TO_PRINTFUL</span></div>
+
+    <p class="message">
+      Paiement reçu. Votre commande est transmise à la production.<br />
+      Vous recevrez un email dès l'expédition avec votre numéro de suivi.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Produit</th>
+          <th style="text-align:right">Qté</th>
+          <th style="text-align:right">Prix TTC</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="name">{{ item.name }}</td>
+          <td style="text-align:right">{{ item.qty }}</td>
+          <td style="text-align:right">{{ item.price }} €</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="2">TOTAL TTC</td>
+          <td style="text-align:right" class="total-amount">{{ amount_ttc }} €</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <a class="cta" href="{{ tracking_url }}">SUIVRE MA COMMANDE</a>
+
+    <p class="legal">
+      Ce produit est fabriqué à la demande. Conformément à l'art. L221-28 12° du Code de la consommation,
+      il est exclu du droit de rétractation de 14 jours applicable aux produits confectionnés selon les
+      spécifications du consommateur.
+    </p>
+  </div>
+
+  <div class="footer">
+    <a href="{{ frontend_url }}" style="color:#00F0FF;">overfitted.io</a> — Critiqué par l'IA. Réparé pour les Humains.
+  </div>
+</div>
+</body>
+</html>

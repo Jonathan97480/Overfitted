@@ -48,6 +48,7 @@ requests==2.33.1
 PyJWT==2.12.1
 pydantic[email]
 bcrypt
+fastapi-mail>=1.6.2
 reportlab==4.2.5
 rembg==2.0.69
 onnxruntime==1.23.2

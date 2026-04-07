@@ -41,7 +41,7 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def admin_login(body: LoginRequest):
-    if not verify_password(body.password):
+    if not await verify_password(body.password):
         raise HTTPException(status_code=401, detail="Mot de passe incorrect.")
     return LoginResponse(access_token=create_admin_token())
 
@@ -474,6 +474,9 @@ class OrderOut(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
+    tracking_number: Optional[str] = None
+    carrier: Optional[str] = None
+    tracking_url: Optional[str] = None
 
 
 @router.get("/orders", response_model=list[OrderOut], dependencies=[Depends(verify_admin_token)])
@@ -487,9 +490,43 @@ async def update_order_status(order_id: int, body: OrderStatusUpdate, db: DBDep)
     order = await db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Commande introuvable.")
+
+    previous_status = order.status
     order.status = body.status
     await db.commit()
     await db.refresh(order)
+
+    # Email d'expédition quand le statut passe à "shipped"
+    if previous_status != OrderStatus.shipped and body.status == OrderStatus.shipped:
+        import asyncio
+        from app.services.email.service import send_shipment_email
+        recipient_email: Optional[str] = None
+        display_name: Optional[str] = None
+
+        # Récupérer l'email depuis l'utilisateur ou la facture
+        if order.user_id:
+            user = await db.get(User, order.user_id)
+            if user and user.is_active:
+                recipient_email = user.email
+                display_name = user.display_name
+        if not recipient_email:
+            invoice = (await db.execute(
+                select(Invoice).where(Invoice.order_id == order.id)
+            )).scalar_one_or_none()
+            if invoice:
+                recipient_email = invoice.user_email
+                display_name = invoice.user_name or None
+
+        if recipient_email:
+            asyncio.ensure_future(send_shipment_email(
+                to=recipient_email,
+                display_name=display_name,
+                order_id=order.id,
+                tracking_number=body.tracking_number,
+                carrier=body.carrier,
+                tracking_url=body.tracking_url,
+            ))
+
     return order
 
 
@@ -1938,4 +1975,39 @@ async def download_invoice_pdf(invoice_id: int, db: DBDep):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─── Email preview ─────────────────────────────────────────────────────────
+
+@router.get("/email-preview/{template_name}", dependencies=[Depends(verify_admin_token)])
+async def email_preview(template_name: str):
+    """Prévisualisation HTML d'un template email (admin — section Paramètres).
+
+    Retourne le HTML rendu du template avec des données fictives.
+    Accessible via GET /api/admin/email-preview/{template_name}
+    Templates disponibles : verify_email | welcome | reset_password | order_confirmation | shipment
+    """
+    from fastapi.responses import HTMLResponse
+    from app.services.email.service import AVAILABLE_TEMPLATES
+
+    if template_name not in AVAILABLE_TEMPLATES:
+        available = list(AVAILABLE_TEMPLATES.keys())
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template '{template_name}' introuvable. Disponibles : {available}",
+        )
+
+    tpl_info = AVAILABLE_TEMPLATES[template_name]
+    html_content = tpl_info["fn"]()
+    return HTMLResponse(content=html_content, status_code=200)
+
+
+@router.get("/email-preview", dependencies=[Depends(verify_admin_token)])
+async def list_email_templates():
+    """Liste tous les templates email disponibles."""
+    from app.services.email.service import AVAILABLE_TEMPLATES
+    return [
+        {"name": name, "label": info["label"]}
+        for name, info in AVAILABLE_TEMPLATES.items()
+    ]
 

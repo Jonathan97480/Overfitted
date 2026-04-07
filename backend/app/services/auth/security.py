@@ -17,6 +17,10 @@ USER_JWT_SECRET = os.getenv("USER_JWT_SECRET", "overfitted-user-dev-secret-CHANG
 ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL_HOURS = 24 * 7   # 7 jours
 
+# TTL des tokens email (différents du token de session)
+EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
+PASSWORD_RESET_TOKEN_TTL_HOURS = 1
+
 
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
@@ -51,3 +55,32 @@ def get_current_user_id(user_token: Annotated[str | None, Cookie()] = None) -> i
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Non authentifié.")
     payload = _decode_user_token(user_token)
     return int(payload["sub"])
+
+
+# ─── Tokens email (vérification + reset) ────────────────────────────────────
+
+def create_email_token(purpose: str, user_id: int, email: str, ttl_hours: int) -> str:
+    """Crée un JWT court-terme pour la vérification d'email ou le reset de mot de passe."""
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "purpose": purpose,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=ttl_hours),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, USER_JWT_SECRET, algorithm=ALGORITHM)
+
+
+def decode_email_token(token: str, expected_purpose: str) -> dict:
+    """Décode et valide un token email. Lève HTTPException si invalide/expiré/mauvais purpose."""
+    try:
+        payload = jwt.decode(token, USER_JWT_SECRET, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Lien expiré. Veuillez en demander un nouveau.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+
+    if payload.get("purpose") != expected_purpose:
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+
+    return payload
