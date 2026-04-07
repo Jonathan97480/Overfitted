@@ -4,7 +4,7 @@ import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
 import { OvfButton } from "@/components/public/OvfButton";
 import { CyberCard } from "@/components/public/CyberCard";
-import { useGetPublicProductsQuery } from "@/lib/publicApi";
+import { useGetPublicCatalogueQuery } from "@/lib/publicApi";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
     togglePendingCollection,
@@ -132,16 +132,16 @@ export default function ShopPage() {
         appliedProductTypes,
     } = useAppSelector((s) => s.shop);
 
-    const { data, isLoading } = useGetPublicProductsQuery();
+    const { data, isLoading } = useGetPublicCatalogueQuery();
 
     // Enrich products with derived metadata
     const enrichedProducts = useMemo(() => {
         if (!data?.result) return [];
-        return data.result.map((product, index) => {
+        return data.result.map((item, index) => {
             const collection = ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
-            const productType = detectProductType(product.name);
-            const soulScore = getSoulScore(product.id);
-            return { ...product, collection, productType, soulScore };
+            const productType = detectProductType(item.title);
+            const soulScore = getSoulScore(item.id);
+            return { ...item, name: item.title, thumbnail_url: item.image_url, collection, productType, soulScore };
         });
     }, [data?.result]);
 
