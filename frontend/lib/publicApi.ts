@@ -118,6 +118,23 @@ export interface OrderDetail extends UserOrder {
     estimated_delivery: string | null;
 }
 
+// ─── Catalogue public types ─────────────────────────────────────────────────
+
+export interface CatalogueProduct {
+    id: number;
+    title: string;
+    description: string | null;
+    image_url: string | null;
+    price: number;
+    category: string | null;
+    tags: string | null;
+    printful_variant_id: string | null;
+    variants_json: string | null;
+    design_url: string | null;
+    placement_json: string | null;
+    created_at: string | null;
+}
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 export const publicApi = createApi({
@@ -125,7 +142,7 @@ export const publicApi = createApi({
     baseQuery: fetchBaseQuery({
         baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
     }),
-    tagTypes: ["PublicProduct", "Me"],
+    tagTypes: ["PublicProduct", "CatalogueProduct", "Me"],
     endpoints: (build) => ({
         getPublicProducts: build.query<
             { paging: { total: number; offset: number; limit: number }; result: PublicProduct[] },
@@ -137,6 +154,19 @@ export const publicApi = createApi({
         getProductById: build.query<{ result: ProductDetail }, number>({
             query: (id) => `/api/products/${id}`,
             providesTags: (_result, _error, id) => [{ type: "PublicProduct", id }],
+        }),
+
+        // Catalogue public (articles actifs sélectionnés en admin)
+        getPublicCatalogue: build.query<
+            { paging: { total: number; offset: number; limit: number }; result: CatalogueProduct[] },
+            void
+        >({
+            query: () => "/api/catalogue/public",
+            providesTags: ["CatalogueProduct"],
+        }),
+        getPublicCatalogueById: build.query<{ result: CatalogueProduct }, number>({
+            query: (id) => `/api/catalogue/public/${id}`,
+            providesTags: (_result, _error, id) => [{ type: "CatalogueProduct", id }],
         }),
 
         // Upload validation (sync — returns DPI + metadata)
@@ -273,6 +303,8 @@ export const publicApi = createApi({
 export const {
     useGetPublicProductsQuery,
     useGetProductByIdQuery,
+    useGetPublicCatalogueQuery,
+    useGetPublicCatalogueByIdQuery,
     useUploadImageMutation,
     useVectorizeImageMutation,
     useScoreSoulMutation,

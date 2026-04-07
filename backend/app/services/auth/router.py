@@ -122,6 +122,8 @@ async def register(body: RegisterRequest, response: Response, background_tasks: 
     from app.services.email.service import send_verification_email
     background_tasks.add_task(send_verification_email, user.email, user.display_name, token)
 
+    session_token = create_user_token(user.id, user.email)
+    _set_auth_cookie(response, session_token)
     return {"message": "Compte créé. Vérifiez votre email.", "user_id": user.id}
 
 

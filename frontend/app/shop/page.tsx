@@ -1,5 +1,6 @@
 "use client";
 import { useMemo } from "react";
+import { assetUrl } from "@/lib/utils";
 import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
 import { OvfButton } from "@/components/public/OvfButton";
@@ -141,7 +142,7 @@ export default function ShopPage() {
             const collection = ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
             const productType = detectProductType(item.title);
             const soulScore = getSoulScore(item.id);
-            return { ...item, name: item.title, thumbnail_url: item.image_url, collection, productType, soulScore };
+            return { ...item, name: item.title, thumbnail_url: assetUrl(item.image_url), collection, productType, soulScore };
         });
     }, [data?.result]);
 

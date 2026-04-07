@@ -82,31 +82,44 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    printful_variant_id = Column(String, nullable=False, unique=True)
     category = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
 
-    # ── Décomposition du prix ──────────────────────────────────────────────
+    # ── Prix communs à toutes les variantes ───────────────────────────────
     # design_price_ht  : prix HT fixé pour le design (travail créatif)
-    # printful_cost_ht : coût HT Printful = article + impression
     # shop_margin_rate : marge boutique en décimal (ex: 0.30 = 30 %)
     # tva_rate         : taux TVA (default 0.20 = 20 %)
-    # price            : prix TTC calculé et stocké = ceil(base_ht * (1+margin) * (1+tva), 2)
+    # price            : prix TTC minimum parmi les variantes (mis à jour auto)
     design_price_ht = Column(Float, nullable=False, default=0.0)
-    printful_cost_ht = Column(Float, nullable=False, default=0.0)
     shop_margin_rate = Column(Float, nullable=False, default=0.30)
     tva_rate = Column(Float, nullable=False, default=0.20)
-    price = Column(Float, nullable=False, default=0.0)  # TTC calculé
+    price = Column(Float, nullable=False, default=0.0)  # prix min TTC
 
     # ── Design + mockup ────────────────────────────────────────────────────
-    # printful_catalog_product_id : ID du produit catalogue Printful (pour Mockup Generator API)
-    # design_url  : URL du fichier artwork brut à envoyer à Printful lors de la commande
-    # mockup_url  : aperçu haute résolution généré par Printful Mockup Generator
-    # placement_json : JSON de positionnement (placement, area, top, left, width, height)
     printful_catalog_product_id = Column(Integer, nullable=True)
     design_url = Column(String, nullable=True)
     mockup_url = Column(String, nullable=True)
     placement_json = Column(Text, nullable=True)
+
+    # ── Relation variantes ─────────────────────────────────────────────────
+    variants = relationship("ProductVariant", back_populates="product",
+                            cascade="all, delete-orphan", lazy="selectin")
+
+
+class ProductVariant(Base):
+    """Une variante d'un Product (taille/couleur spécifique, avec son propre coût Printful)."""
+    __tablename__ = "product_variants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    printful_variant_id = Column(String, nullable=False, unique=True)
+    color = Column(String, nullable=True)
+    size = Column(String, nullable=True)
+    printful_cost_ht = Column(Float, nullable=False, default=0.0)
+    price = Column(Float, nullable=False, default=0.0)  # TTC calculé pour cette variante
+
+    product = relationship("Product", back_populates="variants")
 
 
 class CatalogueStatus(str, enum.Enum):
@@ -125,8 +138,26 @@ class CatalogueItem(Base):
     price = Column(Float, nullable=False)
     category = Column(String, nullable=True)
     status = Column(Enum(CatalogueStatus), default=CatalogueStatus.draft, nullable=False)
-    printful_variant_id = Column(String, nullable=True)
+    printful_variant_id = Column(String, nullable=True)  # conservé pour compatibilité
+    variants_json = Column(Text, nullable=True)  # JSON: [{printful_variant_id, color, size, price}]
+    design_url = Column(String, nullable=True)   # URL du design source (artwork)
+    placement_json = Column(Text, nullable=True)  # JSON placement Printful
     tags = Column(String, nullable=True)  # JSON array sérialisé en String
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ShopDesign(Base):
+    """Asset graphique uploadé pour être appliqué sur des produits Printful."""
+    __tablename__ = "shop_designs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, nullable=False)
+    url = Column(String, nullable=False)  # /static/designs/...
+    dpi = Column(Float, nullable=True)
+    print_ready = Column(Integer, default=0, nullable=False)  # 0=non, 1=oui
+    bg_removed = Column(Integer, default=0, nullable=False)
+    upscaled = Column(Integer, default=0, nullable=False)
+    vectorized = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

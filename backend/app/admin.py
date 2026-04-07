@@ -15,7 +15,7 @@ class OrderAdmin(ModelView, model=Order):
 
 
 class ProductAdmin(ModelView, model=Product):
-    column_list = [Product.id, Product.name, Product.price, Product.category, Product.printful_variant_id]
+    column_list = [Product.id, Product.name, Product.price, Product.category, Product.mockup_url]
 
 
 class CatalogueItemAdmin(ModelView, model=CatalogueItem):

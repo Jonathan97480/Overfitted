@@ -52,6 +52,28 @@ def test_unsign_wrong_key_returns_none():
 # Tests : AdminAuth.login
 # ---------------------------------------------------------------------------
 
+import bcrypt as _bcrypt
+
+
+def _make_mock_session(user_or_none):
+    """Retourne un async context manager simulant SessionLocal."""
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = user_or_none
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+    mock_ctx = MagicMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+    return mock_ctx
+
+
+def _admin_user(username: str, password: str):
+    user = MagicMock()
+    user.username = username
+    user.hashed_password = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+    return user
+
+
 @pytest.mark.asyncio
 async def test_login_valid_credentials_returns_true():
     auth = AdminAuth(secret_key="test_secret")
@@ -59,8 +81,7 @@ async def test_login_valid_credentials_returns_true():
     request.session = {}
     request.form = AsyncMock(return_value={"username": "admin", "password": "secure123"})
 
-    with patch("app.auth.ADMIN_USERNAME", "admin"), \
-         patch("app.auth.ADMIN_PASSWORD", "secure123"):
+    with patch("app.auth.SessionLocal", return_value=_make_mock_session(_admin_user("admin", "secure123"))):
         result = await auth.login(request)
 
     assert result is True
@@ -74,8 +95,7 @@ async def test_login_wrong_password_returns_false():
     request.session = {}
     request.form = AsyncMock(return_value={"username": "admin", "password": "wrong"})
 
-    with patch("app.auth.ADMIN_USERNAME", "admin"), \
-         patch("app.auth.ADMIN_PASSWORD", "secure123"):
+    with patch("app.auth.SessionLocal", return_value=_make_mock_session(_admin_user("admin", "secure123"))):
         result = await auth.login(request)
 
     assert result is False
@@ -89,8 +109,7 @@ async def test_login_wrong_username_returns_false():
     request.session = {}
     request.form = AsyncMock(return_value={"username": "hacker", "password": "secure123"})
 
-    with patch("app.auth.ADMIN_USERNAME", "admin"), \
-         patch("app.auth.ADMIN_PASSWORD", "secure123"):
+    with patch("app.auth.SessionLocal", return_value=_make_mock_session(None)):
         result = await auth.login(request)
 
     assert result is False
@@ -98,15 +117,13 @@ async def test_login_wrong_username_returns_false():
 
 @pytest.mark.asyncio
 async def test_login_empty_config_returns_false():
-    """Si ADMIN_USERNAME/PASSWORD non configurés, login toujours refusé."""
+    """Champs vides → rejet immédiat sans consulter la BDD."""
     auth = AdminAuth(secret_key="test_secret")
     request = MagicMock()
     request.session = {}
     request.form = AsyncMock(return_value={"username": "", "password": ""})
 
-    with patch("app.auth.ADMIN_USERNAME", ""), \
-         patch("app.auth.ADMIN_PASSWORD", ""):
-        result = await auth.login(request)
+    result = await auth.login(request)
 
     assert result is False
 

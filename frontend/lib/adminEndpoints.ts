@@ -50,30 +50,31 @@ export interface OrderOut {
     created_at: string;
 }
 
+export interface ProductVariantOut {
+    id: number;
+    product_id: number;
+    printful_variant_id: string;
+    color: string | null;
+    size: string | null;
+    printful_cost_ht: number;
+    price: number;
+}
+
 export interface ProductOut {
     id: number;
     name: string;
-    printful_variant_id: string;
     category: string | null;
     image_url: string | null;
-    /** Prix HT du design (travail créatif) */
     design_price_ht: number;
-    /** Coût HT Printful = article + impression */
-    printful_cost_ht: number;
-    /** Taux de marge boutique (ex: 0.30 = 30%) */
     shop_margin_rate: number;
-    /** Taux TVA (ex: 0.20 = 20%) */
     tva_rate: number;
-    /** Prix TTC calculé = (design + printful) × (1+marge) × (1+TVA) */
+    /** Prix TTC minimum parmi les variantes */
     price: number;
-    /** ID produit catalogue Printful (pour Mockup Generator API) */
     printful_catalog_product_id: number | null;
-    /** URL du fichier artwork brut (envoyé à Printful à la commande) */
     design_url: string | null;
-    /** Aperçu haute résolution généré par Printful Mockup Generator */
     mockup_url: string | null;
-    /** JSON de positionnement (placement, area, top, left, width, height) */
     placement_json: string | null;
+    variants: ProductVariantOut[];
 }
 
 export interface PrintfulCatalogProduct {
@@ -115,6 +116,9 @@ export interface CatalogueItemOut {
     category: string | null;
     status: CatalogueStatus;
     printful_variant_id: string | null;
+    variants_json: string | null;
+    design_url: string | null;
+    placement_json: string | null;
     tags: string | null;
     created_at: string;
 }
@@ -337,7 +341,7 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         createProduct: build.mutation<
             ProductOut,
-            Omit<ProductOut, "id" | "price">
+            Omit<ProductOut, "id" | "variants"> & { variants?: { printful_variant_id: string; color?: string | null; size?: string | null; printful_cost_ht?: number }[] }
         >({
             query: (body) => ({ url: "/products", method: "POST", body }),
             invalidatesTags: ["Product"],
@@ -350,7 +354,6 @@ const adminApiExtended = adminApi.injectEndpoints({
                 category?: string | null;
                 image_url?: string | null;
                 design_price_ht?: number;
-                printful_cost_ht?: number;
                 shop_margin_rate?: number;
                 tva_rate?: number;
                 printful_catalog_product_id?: number | null;
@@ -370,9 +373,31 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/products/${id}`, method: "DELETE" }),
             invalidatesTags: ["Product"],
         }),
-        syncPrintfulProducts: build.mutation<{ synced: number; updated: number }, void>({
+        updateProductVariant: build.mutation<
+            ProductVariantOut,
+            { product_id: number; variant_id: number; color?: string | null; size?: string | null; printful_cost_ht?: number }
+        >({
+            query: ({ product_id, variant_id, ...body }) => ({
+                url: `/products/${product_id}/variants/${variant_id}`,
+                method: "PATCH",
+                body,
+            }),
+            invalidatesTags: ["Product"],
+        }),
+        deleteProductVariant: build.mutation<{ deleted: number }, { product_id: number; variant_id: number }>({
+            query: ({ product_id, variant_id }) => ({
+                url: `/products/${product_id}/variants/${variant_id}`,
+                method: "DELETE",
+            }),
+            invalidatesTags: ["Product"],
+        }),
+        syncPrintfulProducts: build.mutation<{ synced: number; updated: number; variants_added: number }, void>({
             query: () => ({ url: "/products/sync-printful", method: "POST" }),
             invalidatesTags: ["Product"],
+        }),
+        publishProduct: build.mutation<CatalogueItemOut, number>({
+            query: (id) => ({ url: `/products/${id}/publish`, method: "POST" }),
+            invalidatesTags: ["Product", "Catalogue"],
         }),
 
         // Catalogue (créations boutique admin)
@@ -502,7 +527,7 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => `/printful/catalog/${id}`,
         }),
         addPrintfulProductToStore: build.mutation<
-            { store_product_id: number | null; synced: number },
+            { product_id: number; synced: number },
             { name: string; variants: { id: number; name: string; price: string }[]; thumbnail?: string; catalog_product_id?: number }
         >({
             query: (body) => ({ url: "/printful/store-products", method: "POST", body }),
@@ -528,6 +553,24 @@ const adminApiExtended = adminApi.injectEndpoints({
         getMockupTemplates: build.query<{ templates: PrintfulTemplate[]; available_placements: Record<string, string> }, number>({
             query: (productId) => `/catalog/mockup-templates/${productId}`,
         }),
+
+        // Designs Shop
+        listShopDesigns: build.query<ShopDesignOut[], void>({
+            query: () => "/designs-shop",
+            providesTags: ["ShopDesign"],
+        }),
+        uploadShopDesign: build.mutation<ShopDesignOut, FormData>({
+            query: (body) => ({ url: "/designs-shop/upload", method: "POST", body }),
+            invalidatesTags: ["ShopDesign"],
+        }),
+        processShopDesign: build.mutation<ShopDesignOut, { id: number; remove_bg?: boolean; upscale?: boolean; vectorize?: boolean }>({
+            query: ({ id, ...body }) => ({ url: `/designs-shop/${id}/process`, method: "POST", body }),
+            invalidatesTags: ["ShopDesign"],
+        }),
+        deleteShopDesign: build.mutation<{ deleted: number }, number>({
+            query: (id) => ({ url: `/designs-shop/${id}`, method: "DELETE" }),
+            invalidatesTags: ["ShopDesign"],
+        }),
     }),
 });
 
@@ -545,6 +588,18 @@ export interface PrintfulTemplate {
     is_default: boolean;
 }
 
+export interface ShopDesignOut {
+    id: number;
+    filename: string;
+    url: string;
+    dpi: number | null;
+    print_ready: boolean;
+    bg_removed: boolean;
+    upscaled: boolean;
+    vectorized: boolean;
+    created_at: string;
+}
+
 export const {
     useGetStatsQuery,
     useListUsersQuery,
@@ -560,7 +615,14 @@ export const {
     useCreateProductMutation,
     useUpdateProductMutation,
     useDeleteProductMutation,
+    useUpdateProductVariantMutation,
+    useDeleteProductVariantMutation,
     useSyncPrintfulProductsMutation,
+    usePublishProductMutation,
+    useListShopDesignsQuery,
+    useUploadShopDesignMutation,
+    useProcessShopDesignMutation,
+    useDeleteShopDesignMutation,
     useListCatalogueQuery,
     useCreateCatalogueItemMutation,
     useUpdateCatalogueItemMutation,

@@ -19,6 +19,7 @@ from app.services.admin_api.router import router as admin_router
 from app.services.auth.router import router as auth_router
 from app.services.printful.router import router as printful_router
 from app.services.contact.router import router as contact_router
+from app.services.catalogue.router import router as catalogue_router
 from app.middleware.analytics import AnalyticsMiddleware
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
@@ -101,6 +102,7 @@ app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(printful_router)
 app.include_router(contact_router)
+app.include_router(catalogue_router)
 
 # --- Fichiers statiques (images catalogue, etc.) ---
 _static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")

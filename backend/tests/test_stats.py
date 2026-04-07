@@ -17,7 +17,7 @@ from app.main import app
 # ---------------------------------------------------------------------------
 
 async def _get_token(ac: AsyncClient) -> str:
-    with patch("app.services.admin_api.auth.ADMIN_PASSWORD", "test-pass"):
+    with patch("app.services.admin_api.router.verify_password", new=AsyncMock(return_value=True)):
         r = await ac.post("/api/admin/login", json={"password": "test-pass"})
     assert r.status_code == 200
     return r.json()["access_token"]

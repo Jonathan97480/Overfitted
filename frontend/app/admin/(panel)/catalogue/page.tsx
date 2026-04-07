@@ -38,6 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Pencil, Trash2, Plus, Upload, ImageIcon, Wand2, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { assetUrl } from "@/lib/utils";
 
 const STATUS_LABEL: Record<CatalogueStatus, string> = {
     draft: "Brouillon",
@@ -280,11 +281,11 @@ export default function AdminCataloguePage() {
                                                 <button
                                                     type="button"
                                                     className="w-10 h-10 rounded overflow-hidden block hover:ring-2 hover:ring-[var(--admin-accent)] transition"
-                                                    onClick={() => setLightboxUrl(`${API_URL}${item.image_url}`)}
+                                                    onClick={() => setLightboxUrl(assetUrl(item.image_url))}
                                                     title="Voir en grand"
                                                 >
                                                     <img
-                                                        src={`${API_URL}${item.image_url}`}
+                                                        src={assetUrl(item.image_url)}
                                                         alt={item.title}
                                                         className="w-full h-full object-cover"
                                                     />
@@ -394,7 +395,7 @@ export default function AdminCataloguePage() {
                                         <div className="w-24 h-24 rounded overflow-hidden"
                                             style={{ background: "repeating-conic-gradient(#b0b0b0 0% 25%, #e8e8e8 0% 50%) 0 0 / 12px 12px" }}>
                                             <img
-                                                src={form.image_url.startsWith("/") ? `${API_URL}${form.image_url}` : form.image_url}
+                                                src={assetUrl(form.image_url)}
                                                 alt="Aperçu"
                                                 className="w-full h-full object-contain"
                                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.3"; }}

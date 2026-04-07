@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
@@ -18,7 +18,7 @@ from app.main import app
 # ---------------------------------------------------------------------------
 
 async def _get_token(ac: AsyncClient) -> str:
-    with patch("app.services.admin_api.auth.ADMIN_PASSWORD", "test-pass"):
+    with patch("app.services.admin_api.router.verify_password", new=AsyncMock(return_value=True)):
         r = await ac.post("/api/admin/login", json={"password": "test-pass"})
     assert r.status_code == 200
     return r.json()["access_token"]

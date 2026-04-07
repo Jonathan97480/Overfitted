@@ -1,11 +1,12 @@
 "use client";
-import { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
     useListProductsQuery,
     useCreateProductMutation,
     useUpdateProductMutation,
     useDeleteProductMutation,
     useSyncPrintfulProductsMutation,
+    usePublishProductMutation,
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
     useGenerateMockupMutation,
@@ -30,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Trash2, Plus, Upload, CheckCircle, AlertCircle, ImageIcon, RefreshCw, BookOpen } from "lucide-react";
+import { Edit, Trash2, Plus, Upload, CheckCircle, AlertCircle, ImageIcon, RefreshCw, BookOpen, ChevronDown, ChevronRight, Send } from "lucide-react";
 import { PrintfulCatalogModal } from "./PrintfulCatalogModal";
 import { assetUrl } from "@/lib/utils";
 
@@ -39,7 +40,6 @@ type Step = 1 | 2 | 3 | 4;
 interface FormData {
     name: string;
     category: string;
-    printful_variant_id: string;
     price: string;
     image_url: string | null;
     dpi: number | null;
@@ -52,7 +52,7 @@ interface FormData {
 }
 
 const EMPTY_FORM: FormData = {
-    name: "", category: "", printful_variant_id: "", price: "",
+    name: "", category: "", price: "",
     image_url: null, dpi: null, print_ready: false,
     printful_catalog_product_id: null, design_url: null, mockup_url: null, placement_json: null,
 };
@@ -94,8 +94,7 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
         <div className="space-y-4">
             {[
                 { key: "name", label: "Nom du produit *", placeholder: "Ex: T-Shirt Premium Unisexe" },
-                { key: "printful_variant_id", label: "Printful Variant ID *", placeholder: "Ex: 4011" },
-                { key: "price", label: "Prix (€) *", placeholder: "29.99", type: "number" },
+                { key: "price", label: "Prix design HT (€) *", placeholder: "5.00", type: "number" },
             ].map(({ key, label, placeholder, type }) => (
                 <div key={key}>
                     <label className="text-xs text-[var(--admin-muted-2)] mb-1 block">{label}</label>
@@ -441,7 +440,7 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
         try {
             const res = await generateMockup({
                 printful_catalog_product_id: selectedProduct.printful_catalog_product_id,
-                variant_id: parseInt(selectedProduct.printful_variant_id),
+                variant_id: parseInt(selectedProduct.variants[0]?.printful_variant_id ?? "0"),
                 design_url: form.image_url,
                 placement: effectivePlacement,
                 area_width: AREA_W, area_height: AREA_H,
@@ -455,7 +454,6 @@ function StepMockup({ form, setForm }: { form: FormData; setForm: (f: FormData) 
                 placement_json: JSON.stringify(res.placement_json),
                 design_url: form.image_url,
                 printful_catalog_product_id: selectedProduct.printful_catalog_product_id,
-                printful_variant_id: selectedProduct.printful_variant_id,
                 image_url: res.mockup_url,  // utilise le mockup comme thumbnail produit
             });
         } catch (e: unknown) {
@@ -591,15 +589,19 @@ function StepValidation({ form }: { form: FormData }) {
     const rows = [
         { label: "Nom", value: form.name },
         { label: "Catégorie", value: form.category || "—" },
-        { label: "Printful Variant ID", value: form.printful_variant_id },
-        { label: "Prix", value: `${parseFloat(form.price || "0").toFixed(2)} €` },
+        { label: "Design HT", value: `${parseFloat(form.price || "0").toFixed(2)} €` },
         { label: "DPI", value: form.dpi ? `${form.dpi} DPI` : "—" },
         {
             label: "Prêt pour impression", value: form.dpi ? (form.print_ready ? "✓ Oui" : "✗ Non (< 300 DPI)") : "—",
             color: form.print_ready ? "#22C55E" : form.dpi !== null ? "#EF4444" : undefined
         },
         { label: "Mockup généré", value: form.mockup_url ? "✓ Oui" : "Non", color: form.mockup_url ? "#22C55E" : undefined },
-        { label: "Emplacement", value: form.placement_json ? (JSON.parse(form.placement_json).placement ?? "—") : "—" },
+        {
+            label: "Emplacement",
+            value: form.placement_json
+                ? (() => { try { return (JSON.parse(form.placement_json) as { placement?: string }).placement ?? "—"; } catch { return "—"; } })()
+                : "—"
+        },
     ];
     return (
         <div className="space-y-3">
@@ -642,8 +644,7 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
     const [form, setForm] = useState<FormData>({
         name: initial?.name ?? "",
         category: initial?.category ?? "",
-        printful_variant_id: initial?.printful_variant_id ?? "",
-        price: initial ? String(initial.price) : "",
+        price: initial ? String(initial.design_price_ht) : "",
         image_url: initial?.image_url ?? null,
         dpi: null, print_ready: false,
         printful_catalog_product_id: initial?.printful_catalog_product_id ?? null,
@@ -654,7 +655,7 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
     const [createProduct, { isLoading: creating }] = useCreateProductMutation();
     const [updateProduct, { isLoading: updating }] = useUpdateProductMutation();
 
-    const step1Valid = form.name.trim().length > 0 && form.printful_variant_id.trim().length > 0 && parseFloat(form.price) > 0;
+    const step1Valid = form.name.trim().length > 0 && parseFloat(form.price) > 0;
 
     const handleSubmit = async () => {
         try {
@@ -671,14 +672,15 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
             } else {
                 await createProduct({
                     name: form.name, category: form.category || null,
-                    printful_variant_id: form.printful_variant_id,
                     design_price_ht: parseFloat(form.price) || 0,
-                    printful_cost_ht: 0, shop_margin_rate: 0.30, tva_rate: 0.20,
+                    shop_margin_rate: 0.30, tva_rate: 0.20,
+                    price: 0,
                     image_url: form.image_url,
                     design_url: form.design_url,
                     mockup_url: form.mockup_url,
                     placement_json: form.placement_json,
                     printful_catalog_product_id: form.printful_catalog_product_id,
+                    variants: [],
                 }).unwrap();
             }
             onClose();
@@ -759,7 +761,10 @@ export default function AdminProductsPage() {
     const [updateProduct] = useUpdateProductMutation();
     const [deleteProduct] = useDeleteProductMutation();
     const [syncPrintful, { isLoading: isSyncing }] = useSyncPrintfulProductsMutation();
-    const [syncResult, setSyncResult] = useState<{ synced: number; updated: number } | null>(null);
+    const [publishProduct, { isLoading: isPublishing }] = usePublishProductMutation();
+    const [publishingId, setPublishingId] = useState<number | null>(null);
+    const [expandedId, setExpandedId] = useState<number | null>(null);
+    const [syncResult, setSyncResult] = useState<{ synced: number; updated: number; variants_added: number } | null>(null);
     const [search, setSearch] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [catalogOpen, setCatalogOpen] = useState(false);
@@ -778,7 +783,7 @@ export default function AdminProductsPage() {
         const q = search.toLowerCase();
         return (products ?? []).filter((p) =>
             !q || p.name.toLowerCase().includes(q) ||
-            p.printful_variant_id.toLowerCase().includes(q) ||
+            p.variants.some((v) => (v.color ?? "").toLowerCase().includes(q) || (v.size ?? "").toLowerCase().includes(q)) ||
             (p.category ?? "").toLowerCase().includes(q)
         );
     }, [products, search]);
@@ -798,7 +803,7 @@ export default function AdminProductsPage() {
                 <div className="flex items-center gap-2">
                     {syncResult && (
                         <span className="text-xs" style={{ color: "var(--admin-muted-2)" }}>
-                            ✓ {syncResult.synced} créés, {syncResult.updated} mis à jour
+                            ✓ {syncResult.synced} créés, {syncResult.updated} mis à jour, {syncResult.variants_added} variantes
                         </span>
                     )}
                     <Button size="sm" variant="outline" onClick={handleSync} disabled={isSyncing}
@@ -823,8 +828,8 @@ export default function AdminProductsPage() {
                 <Table>
                     <TableHeader>
                         <TableRow style={{ borderColor: "var(--admin-border)" }}>
-                            {["ID", "Image", "Nom", "Catégorie", "Variant ID", "Prix vente TTC", "Coût Printful HT", "Marge", ""].map((h) => (
-                                <TableHead key={h} className={`text-[var(--admin-muted-2)] text-xs${h === "" ? " text-right" : ""}`}>{h}</TableHead>
+                            {[["expand", ""], ["id", "ID"], ["img", "Image"], ["name", "Nom"], ["cat", "Catégorie"], ["vars", "Variantes"], ["price", "Prix min TTC"], ["margin", "Marge"], ["actions", ""]].map(([key, h]) => (
+                                <TableHead key={key} className={`text-[var(--admin-muted-2)] text-xs${h === "" ? " text-right w-4" : ""}`}>{h}</TableHead>
                             ))}
                         </TableRow>
                     </TableHeader>
@@ -844,45 +849,102 @@ export default function AdminProductsPage() {
                                 </TableCell>
                             </TableRow>
                         ) : filtered.map((p) => (
-                            <TableRow key={p.id} style={{ borderColor: "var(--admin-border)" }} className="hover:bg-white/5">
-                                <TableCell className="font-mono text-[var(--admin-muted-2)] text-xs">#{p.id}</TableCell>
-                                <TableCell>
-                                    {p.image_url ? (
-                                        <img src={p.image_url} alt="" className="w-10 h-10 object-contain rounded"
-                                            style={{ border: "1px solid var(--admin-border)" }} />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded flex items-center justify-center"
-                                            style={{ background: "var(--admin-border)" }}>
-                                            <ImageIcon size={14} className="text-[var(--admin-muted-2)]" />
+                            <React.Fragment key={p.id}>
+                                <TableRow key={p.id} style={{ borderColor: "var(--admin-border)" }} className="hover:bg-white/5">
+                                    {/* Expand toggle */}
+                                    <TableCell className="w-6 px-2">
+                                        {p.variants.length > 0 && (
+                                            <button
+                                                onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                                                className="text-[var(--admin-muted-2)] hover:text-white transition-colors">
+                                                {expandedId === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            </button>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-[var(--admin-muted-2)] text-xs">#{p.id}</TableCell>
+                                    <TableCell>
+                                        {p.image_url ? (
+                                            <img src={p.image_url} alt="" className="w-10 h-10 object-contain rounded"
+                                                style={{ border: "1px solid var(--admin-border)" }} />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded flex items-center justify-center"
+                                                style={{ background: "var(--admin-border)" }}>
+                                                <ImageIcon size={14} className="text-[var(--admin-muted-2)]" />
+                                            </div>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-white text-sm font-medium">{p.name}</TableCell>
+                                    <TableCell className="text-[var(--admin-muted-2)] text-xs">{p.category ?? "—"}</TableCell>
+                                    <TableCell>
+                                        <span className="px-2 py-0.5 rounded text-xs font-mono"
+                                            style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", color: p.variants.length > 0 ? "#22C55E" : "var(--admin-muted-2)" }}>
+                                            {p.variants.length} variante{p.variants.length !== 1 ? "s" : ""}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="text-white text-sm">
+                                        <InlinePriceCell product={p} onSave={(val) => updateProduct({ id: p.id, design_price_ht: val })} />
+                                    </TableCell>
+                                    <TableCell className="text-sm">
+                                        <span className="px-2 py-0.5 rounded text-xs font-mono"
+                                            style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", color: "#22C55E" }}>
+                                            {(p.shop_margin_rate * 100).toFixed(0)} %
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex items-center justify-end gap-1">
+                                            <button
+                                                disabled={publishingId === p.id || !p.mockup_url}
+                                                onClick={async () => {
+                                                    if (!p.mockup_url) return;
+                                                    setPublishingId(p.id);
+                                                    try { await publishProduct(p.id).unwrap(); } catch { /* ignore */ } finally { setPublishingId(null); }
+                                                }}
+                                                className="p-1.5 rounded hover:bg-emerald-500/20 text-[var(--admin-muted-2)] hover:text-emerald-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                title={p.mockup_url ? "Publier dans le catalogue" : "Générez d'abord un mockup"}>
+                                                <Send size={13} className={publishingId === p.id ? "animate-pulse" : ""} />
+                                            </button>
+                                            <button onClick={() => openEdit(p)}
+                                                className="p-1.5 rounded hover:bg-white/10 text-[var(--admin-muted-2)] hover:text-white transition-colors"
+                                                title="Modifier"><Edit size={14} /></button>
+                                            <button onClick={() => setDeleteTarget(p)}
+                                                className="p-1.5 rounded hover:bg-red-500/20 text-[var(--admin-muted-2)] hover:text-red-400 transition-colors"
+                                                title="Supprimer"><Trash2 size={14} /></button>
                                         </div>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-white text-sm font-medium">{p.name}</TableCell>
-                                <TableCell className="text-[var(--admin-muted-2)] text-xs">{p.category ?? "—"}</TableCell>
-                                <TableCell className="font-mono text-[var(--admin-muted-2)] text-xs">{p.printful_variant_id}</TableCell>
-                                <TableCell className="text-white text-sm">
-                                    <InlinePriceCell product={p} onSave={(val) => updateProduct({ id: p.id, design_price_ht: val })} />
-                                </TableCell>
-                                <TableCell className="text-[var(--admin-muted-2)] text-sm">
-                                    {p.printful_cost_ht.toFixed(2)} €
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                    <span className="px-2 py-0.5 rounded text-xs font-mono"
-                                        style={{ background: "var(--admin-card)", border: "1px solid var(--admin-border)", color: "#22C55E" }}>
-                                        {(p.shop_margin_rate * 100).toFixed(0)} %
-                                    </span>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                        <button onClick={() => openEdit(p)}
-                                            className="p-1.5 rounded hover:bg-white/10 text-[var(--admin-muted-2)] hover:text-white transition-colors"
-                                            title="Modifier"><Edit size={14} /></button>
-                                        <button onClick={() => setDeleteTarget(p)}
-                                            className="p-1.5 rounded hover:bg-red-500/20 text-[var(--admin-muted-2)] hover:text-red-400 transition-colors"
-                                            title="Supprimer"><Trash2 size={14} /></button>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
+                                    </TableCell>
+                                </TableRow>
+                                {/* Variantes expansibles */}
+                                {expandedId === p.id && p.variants.map((v) => (
+                                    <TableRow key={`v-${v.id}`} style={{ borderColor: "var(--admin-border)", background: "rgba(255,255,255,0.02)" }}>
+                                        <TableCell />
+                                        <TableCell colSpan={2} className="font-mono text-[10px] text-[var(--admin-muted-2)] pl-6">
+                                            ID var: {v.printful_variant_id}
+                                        </TableCell>
+                                        <TableCell colSpan={2}>
+                                            <div className="flex items-center gap-2">
+                                                {v.color && (
+                                                    <span className="text-xs px-2 py-0.5 rounded"
+                                                        style={{ background: "var(--admin-border)", color: "white" }}>
+                                                        {v.color}
+                                                    </span>
+                                                )}
+                                                {v.size && (
+                                                    <span className="text-xs px-2 py-0.5 rounded"
+                                                        style={{ background: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
+                                                        {v.size}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-[var(--admin-muted-2)] text-xs">
+                                            Coût HT: {v.printful_cost_ht.toFixed(2)} €
+                                        </TableCell>
+                                        <TableCell className="text-white text-xs">
+                                            {v.price.toFixed(2)} €
+                                        </TableCell>
+                                        <TableCell colSpan={2} />
+                                    </TableRow>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </TableBody>
                 </Table>

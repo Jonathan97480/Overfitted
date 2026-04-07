@@ -60,6 +60,7 @@ export function CyberCard({
                             fill
                             sizes="130px"
                             className="object-cover"
+                            unoptimized={thumbnailUrl.startsWith("http://")}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-[#00F0FF]/20 text-[9px] tracking-widest uppercase">

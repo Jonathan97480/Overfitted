@@ -45,6 +45,11 @@ def _unsign(signed: str) -> str | None:
     return None
 
 
+def _constant_time_compare(a: str, b: str) -> bool:
+    """Comparaison de chaînes en temps constant — protège contre les timing attacks."""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
 class AdminAuth(AuthenticationBackend):
     """Backend d'authentification SQLAdmin.
 

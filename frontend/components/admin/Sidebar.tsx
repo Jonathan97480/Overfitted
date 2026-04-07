@@ -16,6 +16,7 @@ import {
     Receipt,
     ChevronLeft,
     ChevronRight,
+    Palette,
 } from "lucide-react";
 import { useAppDispatch } from "@/lib/hooks";
 import { clearToken } from "@/lib/adminAuthSlice";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/catalogue", label: "Catalogue", icon: Store },
+    { href: "/admin/designs-shop", label: "Designs Shop", icon: Palette },
     { href: "/admin/designs", label: "Designs users", icon: ImageIcon },
     { href: "/admin/orders", label: "Commandes", icon: ShoppingCart },
     { href: "/admin/products", label: "Produits Printful", icon: Package },

@@ -10,13 +10,13 @@ import asyncio
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, PromoCode, Setting, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, ProductVariant, PromoCode, Setting, ShopDesign, User
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 from app.middleware.analytics import get_top_pages, get_product_views
 
@@ -539,38 +539,53 @@ def _compute_price_ttc(design_price_ht: float, printful_cost_ht: float, shop_mar
     return round(price_ht * (1 + tva_rate), 2)
 
 
+class ProductVariantOut(BaseModel):
+    id: int
+    product_id: int
+    printful_variant_id: str
+    color: Optional[str]
+    size: Optional[str]
+    printful_cost_ht: float
+    price: float
+    model_config = {"from_attributes": True}
+
+
 class ProductOut(BaseModel):
     id: int
     name: str
-    printful_variant_id: str
     category: Optional[str]
     image_url: Optional[str] = None
     design_price_ht: float
-    printful_cost_ht: float
     shop_margin_rate: float
     tva_rate: float
-    price: float  # TTC calculé
-    # Champs design / mockup
+    price: float  # prix min TTC parmi variantes
     printful_catalog_product_id: Optional[int] = None
     design_url: Optional[str] = None
     mockup_url: Optional[str] = None
     placement_json: Optional[str] = None
+    variants: List[ProductVariantOut] = []
     model_config = {"from_attributes": True}
+
+
+class ProductVariantCreate(BaseModel):
+    printful_variant_id: str
+    color: Optional[str] = None
+    size: Optional[str] = None
+    printful_cost_ht: float = 0.0
 
 
 class ProductCreate(BaseModel):
     name: str
-    printful_variant_id: str
     category: Optional[str] = None
     image_url: Optional[str] = None
     design_price_ht: float = 0.0
-    printful_cost_ht: float = 0.0
     shop_margin_rate: float = 0.30
     tva_rate: float = 0.20
     printful_catalog_product_id: Optional[int] = None
     design_url: Optional[str] = None
     mockup_url: Optional[str] = None
     placement_json: Optional[str] = None
+    variants: List[ProductVariantCreate] = []
 
 
 class ProductUpdate(BaseModel):
@@ -578,13 +593,18 @@ class ProductUpdate(BaseModel):
     category: Optional[str] = None
     image_url: Optional[str] = None
     design_price_ht: Optional[float] = None
-    printful_cost_ht: Optional[float] = None
     shop_margin_rate: Optional[float] = None
     tva_rate: Optional[float] = None
     printful_catalog_product_id: Optional[int] = None
     design_url: Optional[str] = None
     mockup_url: Optional[str] = None
     placement_json: Optional[str] = None
+
+
+class ProductVariantUpdate(BaseModel):
+    color: Optional[str] = None
+    size: Optional[str] = None
+    printful_cost_ht: Optional[float] = None
 
 
 @router.get("/products", response_model=list[ProductOut], dependencies=[Depends(verify_admin_token)])
@@ -595,13 +615,30 @@ async def list_products(db: DBDep):
 
 @router.post("/products", response_model=ProductOut, status_code=201, dependencies=[Depends(verify_admin_token)])
 async def create_product(body: ProductCreate, db: DBDep):
-    data = body.model_dump()
-    data["price"] = _compute_price_ttc(
-        data["design_price_ht"], data["printful_cost_ht"],
-        data["shop_margin_rate"], data["tva_rate"],
-    )
+    data = body.model_dump(exclude={"variants"})
     product = Product(**data)
     db.add(product)
+    await db.flush()  # pour récupérer product.id
+    for v in body.variants:
+        variant_price = _compute_price_ttc(
+            data["design_price_ht"], v.printful_cost_ht,
+            data["shop_margin_rate"], data["tva_rate"],
+        )
+        db.add(ProductVariant(
+            product_id=product.id,
+            printful_variant_id=v.printful_variant_id,
+            color=v.color,
+            size=v.size,
+            printful_cost_ht=v.printful_cost_ht,
+            price=variant_price,
+        ))
+    # prix min = variante la moins chère (ou 0 si aucune)
+    if body.variants:
+        product.price = min(
+            _compute_price_ttc(data["design_price_ht"], v.printful_cost_ht,
+                               data["shop_margin_rate"], data["tva_rate"])
+            for v in body.variants
+        )
     await db.commit()
     await db.refresh(product)
     return product
@@ -614,11 +651,18 @@ async def update_product(product_id: int, body: ProductUpdate, db: DBDep):
         raise HTTPException(status_code=404, detail="Produit introuvable.")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
-    # Recalcul du prix TTC à chaque mise à jour des composantes
-    product.price = _compute_price_ttc(
-        product.design_price_ht, product.printful_cost_ht,
-        product.shop_margin_rate, product.tva_rate,
-    )
+    # Recalcul du prix TTC sur toutes les variantes si design_price_ht ou rates changent
+    if body.design_price_ht is not None or body.shop_margin_rate is not None or body.tva_rate is not None:
+        variants = (await db.execute(
+            select(ProductVariant).where(ProductVariant.product_id == product_id)
+        )).scalars().all()
+        for v in variants:
+            v.price = _compute_price_ttc(
+                product.design_price_ht, v.printful_cost_ht,
+                product.shop_margin_rate, product.tva_rate,
+            )
+        if variants:
+            product.price = min(v.price for v in variants)
     await db.commit()
     await db.refresh(product)
     return product
@@ -634,17 +678,59 @@ async def delete_product(product_id: int, db: DBDep):
     return {"deleted": product_id}
 
 
+@router.patch("/products/{product_id}/variants/{variant_id}",
+              response_model=ProductVariantOut, dependencies=[Depends(verify_admin_token)])
+async def update_product_variant(product_id: int, variant_id: int,
+                                  body: ProductVariantUpdate, db: DBDep):
+    variant = (await db.execute(
+        select(ProductVariant).where(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+        )
+    )).scalar_one_or_none()
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variante introuvable.")
+    product = await db.get(Product, product_id)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(variant, field, value)
+    variant.price = _compute_price_ttc(
+        product.design_price_ht, variant.printful_cost_ht,
+        product.shop_margin_rate, product.tva_rate,
+    )
+    # Mettre à jour le prix min du produit
+    all_variants = (await db.execute(
+        select(ProductVariant).where(ProductVariant.product_id == product_id)
+    )).scalars().all()
+    product.price = min(v.price for v in all_variants)
+    await db.commit()
+    await db.refresh(variant)
+    return variant
+
+
+@router.delete("/products/{product_id}/variants/{variant_id}",
+               dependencies=[Depends(verify_admin_token)])
+async def delete_product_variant(product_id: int, variant_id: int, db: DBDep):
+    variant = (await db.execute(
+        select(ProductVariant).where(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+        )
+    )).scalar_one_or_none()
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variante introuvable.")
+    await db.delete(variant)
+    await db.commit()
+    return {"deleted": variant_id}
+
+
 @router.post("/products/sync-printful", dependencies=[Depends(verify_admin_token)])
 async def sync_products_from_printful(db: DBDep) -> dict:
     """Synchronise le catalogue Printful → table `products` locale.
 
-    - Pagine automatiquement l'intégralité du store Printful (limit=100)
-    - Upsert par `printful_variant_id` (clé unique = ID du sync_variant)
-    - Nouveaux variants : créés avec les valeurs par défaut (design_price_ht=0, margin=30%, TVA=20%)
-    - Variants existants : `name`, `image_url` et `printful_cost_ht` mis à jour, `price` recalculé
-      (design_price_ht, shop_margin_rate, tva_rate configurés par l'admin sont préservés)
-
-    Retourne { synced: N, updated: M } où synced = nouveaux, updated = modifiés.
+    - 1 sync_product Printful → 1 Product local
+    - N sync_variants Printful → N ProductVariant liées au Product
+    - Upsert : cherche un Product existant via ses variantes, sinon crée
+    - Retourne { synced: N, updated: M, variants_added: K }
     """
     from app.services.printful.client import (
         get_store_product,
@@ -664,14 +750,13 @@ async def sync_products_from_printful(db: DBDep) -> dict:
             status_code=503,
             detail=(
                 "PRINTFUL_STORE_ID non configuré. "
-                "Accédez à Paramètres > Printful pour entrer votre Store ID. "
-                "Vous pouvez le trouver dans votre dashboard Printful : "
-                "sélectionnez votre store et regardez l'URL ou Settings > Stores."
+                "Accédez à Paramètres > Printful pour entrer votre Store ID."
             ),
         )
 
     synced = 0
     updated = 0
+    variants_added = 0
     offset = 0
     limit = 100
 
@@ -689,43 +774,83 @@ async def sync_products_from_printful(db: DBDep) -> dict:
             try:
                 detail = await get_store_product(api_key, sync_product["id"], store_id=store_id)
             except ValueError:
-                continue  # produit inaccessible ou ignoré — on passe
+                continue
 
             result = detail.get("result", {})
             sp = result.get("sync_product", {})
             thumbnail = sp.get("thumbnail_url")
-            variants = result.get("sync_variants", [])
+            product_name = sp.get("name") or sync_product.get("name", "")
+            sync_variants = result.get("sync_variants", [])
 
-            for variant in variants:
-                variant_id = str(variant["id"])
-                printful_cost = float(variant.get("retail_price") or 0)
-                raw_name = variant.get("name", "")
-                product_name = (
-                    f"{sync_product['name']} — {raw_name}" if raw_name else sync_product["name"]
+            # Trouver un Product existant via une de ses variantes
+            product: Optional[Product] = None
+            for sv in sync_variants:
+                vid = str(sv["id"])
+                existing_variant = (await db.execute(
+                    select(ProductVariant).where(ProductVariant.printful_variant_id == vid)
+                )).scalar_one_or_none()
+                if existing_variant:
+                    product = await db.get(Product, existing_variant.product_id)
+                    break
+
+            if product:
+                product.name = product_name
+                product.image_url = thumbnail
+                updated += 1
+            else:
+                product = Product(
+                    name=product_name,
+                    image_url=thumbnail,
+                    printful_catalog_product_id=sp.get("external_id"),
                 )
+                db.add(product)
+                await db.flush()
+                synced += 1
 
-                existing = (await db.execute(
-                    select(Product).where(Product.printful_variant_id == variant_id)
+            # Upsert variantes
+            for sv in sync_variants:
+                vid = str(sv["id"])
+                raw_name = sv.get("name", "")
+                printful_cost = float(sv.get("retail_price") or 0)
+                # Parser couleur/taille depuis le nom de variante
+                color, size = None, None
+                if " / " in raw_name:
+                    parts = [p.strip() for p in raw_name.split("/")]
+                    if len(parts) >= 2:
+                        color = parts[0]
+                        size = parts[1]
+
+                existing_v = (await db.execute(
+                    select(ProductVariant).where(ProductVariant.printful_variant_id == vid)
                 )).scalar_one_or_none()
 
-                if existing:
-                    existing.name = product_name
-                    existing.image_url = thumbnail
-                    existing.printful_cost_ht = printful_cost
-                    existing.price = _compute_price_ttc(
-                        existing.design_price_ht, printful_cost,
-                        existing.shop_margin_rate, existing.tva_rate,
-                    )
-                    updated += 1
+                price_ttc = _compute_price_ttc(
+                    product.design_price_ht, printful_cost,
+                    product.shop_margin_rate, product.tva_rate,
+                )
+                if existing_v:
+                    existing_v.printful_cost_ht = printful_cost
+                    existing_v.price = price_ttc
+                    existing_v.color = color
+                    existing_v.size = size
                 else:
-                    db.add(Product(
-                        name=product_name,
-                        printful_variant_id=variant_id,
-                        image_url=thumbnail,
+                    db.add(ProductVariant(
+                        product_id=product.id,
+                        printful_variant_id=vid,
+                        color=color,
+                        size=size,
                         printful_cost_ht=printful_cost,
-                        price=_compute_price_ttc(0.0, printful_cost, 0.30, 0.20),
+                        price=price_ttc,
                     ))
-                    synced += 1
+                    variants_added += 1
+
+            # Mettre à jour price min du produit
+            await db.flush()
+            all_v = (await db.execute(
+                select(ProductVariant).where(ProductVariant.product_id == product.id)
+            )).scalars().all()
+            if all_v:
+                product.price = min(v.price for v in all_v)
 
         paging = page.get("paging", {})
         total = paging.get("total", 0)
@@ -734,7 +859,7 @@ async def sync_products_from_printful(db: DBDep) -> dict:
             break
 
     await db.commit()
-    return {"synced": synced, "updated": updated}
+    return {"synced": synced, "updated": updated, "variants_added": variants_added}
 
 
 # ─── Catalogue Printful (parcourir + ajouter au store) ─────────────────────
@@ -928,22 +1053,31 @@ async def generate_mockup(body: GenerateMockupRequest, db: DBDep) -> dict:
 
     # Réécrire l'URL locale en URL publique pour que Printful puisse y accéder
     design_url = body.design_url
+    # Relire le .env à chaque appel (hot-reload dev — load_dotenv ne se re-exécute pas avec watchfiles)
+    from pathlib import Path as _Path
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(dotenv_path=_Path(__file__).resolve().parent.parent.parent.parent / ".env", override=True)
     public_base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
-    if public_base:
-        import re as _re
-        design_url = _re.sub(
-            r"https?://localhost(:\d+)?",
-            public_base,
-            design_url,
-        )
-        # Cas où l'URL est déjà avec 127.0.0.1
-        design_url = _re.sub(
-            r"https?://127\.0\.0\.1(:\d+)?",
-            public_base,
-            design_url,
-        )
 
     import logging as _logging
+    _logging.getLogger(__name__).info(f"[generate_mockup] design_url reçue: {design_url} | public_base: {public_base!r}")
+
+    if public_base:
+        import re as _re
+        from urllib.parse import urlparse as _urlparse
+        parsed = _urlparse(design_url)
+        # Remplacer si l'hôte est localhost, 127.0.0.1, ou une IP privée (10./172.16-31./192.168.)
+        _private_host = _re.compile(
+            r"^(localhost|127\.0\.0\.1"
+            r"|10\.\d+\.\d+\.\d+"
+            r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+"
+            r"|192\.168\.\d+\.\d+)$"
+        )
+        if _private_host.match(parsed.hostname or ""):
+            design_url = public_base + parsed.path
+            if parsed.query:
+                design_url += "?" + parsed.query
+
     _logging.getLogger(__name__).info(f"[generate_mockup] design_url envoyée à Printful: {design_url}")
 
     # Vérification de sécurité — l'URL doit être absolue et non localhost
@@ -1063,35 +1197,75 @@ class AddToStoreRequest(BaseModel):
 
 @router.post("/printful/store-products", dependencies=[Depends(verify_admin_token)])
 async def add_printful_product_to_store(body: AddToStoreRequest, db: DBDep) -> dict:
-    """Sauvegarde les variants du catalogue Printful en DB locale.
+    """Sauvegarde un produit Printful avec ses variantes en DB locale.
 
-    Chaque variant est sauvegardé avec son propre prix Printful.
-    Le prix TTC est calculé individuellement via _compute_price_ttc.
+    Crée 1 Product + N ProductVariant (1 variante = 1 combination couleur/taille).
+    Si une variante existe déjà (par printful_variant_id), elle est ignorée.
+    Si toutes les variantes existent, retourne le product parent existant.
     """
-    synced = 0
-
+    # Chercher un Product existant via une des variantes
+    product: Optional[Product] = None
     for variant in body.variants:
-        variant_id_str = str(variant.id)
-        printful_cost = float(variant.price) if variant.price else 0.0
-        product_name = f"{body.name} — {variant.name}" if variant.name else body.name
-
-        existing = (await db.execute(
-            select(Product).where(Product.printful_variant_id == variant_id_str)
+        vid = str(variant.id)
+        existing_v = (await db.execute(
+            select(ProductVariant).where(ProductVariant.printful_variant_id == vid)
         )).scalar_one_or_none()
+        if existing_v:
+            product = await db.get(Product, existing_v.product_id)
+            break
 
-        if not existing:
-            db.add(Product(
-                name=product_name,
-                printful_variant_id=variant_id_str,
-                image_url=body.thumbnail,
-                printful_cost_ht=printful_cost,
-                printful_catalog_product_id=body.catalog_product_id,
-                price=_compute_price_ttc(0.0, printful_cost, 0.30, 0.20),
-            ))
-            synced += 1
+    if product is None:
+        product = Product(
+            name=body.name,
+            image_url=body.thumbnail,
+            printful_catalog_product_id=body.catalog_product_id,
+        )
+        db.add(product)
+        await db.flush()
+
+    synced = 0
+    for variant in body.variants:
+        vid = str(variant.id)
+        existing_v = (await db.execute(
+            select(ProductVariant).where(ProductVariant.printful_variant_id == vid)
+        )).scalar_one_or_none()
+        if existing_v:
+            continue
+
+        printful_cost = float(variant.price) if variant.price else 0.0
+        # Parser couleur/taille depuis le nom de variante (ex: "Black / S")
+        color, size = None, None
+        raw = variant.name or ""
+        if " / " in raw:
+            parts = [p.strip() for p in raw.split("/")]
+            if len(parts) >= 2:
+                color = parts[0]
+                size = parts[1]
+
+        price_ttc = _compute_price_ttc(
+            product.design_price_ht, printful_cost,
+            product.shop_margin_rate, product.tva_rate,
+        )
+        db.add(ProductVariant(
+            product_id=product.id,
+            printful_variant_id=vid,
+            color=color,
+            size=size,
+            printful_cost_ht=printful_cost,
+            price=price_ttc,
+        ))
+        synced += 1
+
+    await db.flush()
+    # Mettre à jour price min du produit
+    all_v = (await db.execute(
+        select(ProductVariant).where(ProductVariant.product_id == product.id)
+    )).scalars().all()
+    if all_v:
+        product.price = min(v.price for v in all_v)
 
     await db.commit()
-    return {"store_product_id": None, "synced": synced}
+    return {"product_id": product.id, "synced": synced}
 
 
 # ─── Catalogue (créations boutique admin) ──────────────────────────────────
@@ -1105,6 +1279,9 @@ class CatalogueItemOut(BaseModel):
     category: Optional[str]
     status: CatalogueStatus
     printful_variant_id: Optional[str]
+    variants_json: Optional[str]
+    design_url: Optional[str]
+    placement_json: Optional[str]
     tags: Optional[str]
     created_at: datetime
     model_config = {"from_attributes": True}
@@ -1118,6 +1295,9 @@ class CatalogueItemCreate(BaseModel):
     category: Optional[str] = None
     status: CatalogueStatus = CatalogueStatus.draft
     printful_variant_id: Optional[str] = None
+    variants_json: Optional[str] = None
+    design_url: Optional[str] = None
+    placement_json: Optional[str] = None
     tags: Optional[str] = None
 
 
@@ -1129,6 +1309,9 @@ class CatalogueItemUpdate(BaseModel):
     category: Optional[str] = None
     status: Optional[CatalogueStatus] = None
     printful_variant_id: Optional[str] = None
+    variants_json: Optional[str] = None
+    design_url: Optional[str] = None
+    placement_json: Optional[str] = None
     tags: Optional[str] = None
 
 
@@ -1353,6 +1536,290 @@ async def delete_catalogue_item(item_id: int, db: DBDep):
     await db.delete(item)
     await db.commit()
     return {"deleted": item_id}
+
+
+# ─── publish Product → Catalogue ──────────────────────────────────────────
+
+@router.post("/products/{product_id}/publish",
+             response_model=CatalogueItemOut,
+             dependencies=[Depends(verify_admin_token)])
+async def publish_product(product_id: int, db: DBDep):
+    """Publie un Product Printful dans le catalogue boutique.
+
+    Upsert CatalogueItem par product_id (cherche un existant lié).
+    La liste des variantes (couleur/taille/prix) est sérialisée en variants_json.
+    status est mis à 'active' automatiquement.
+    """
+    import json
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Produit introuvable.")
+    if not product.mockup_url:
+        raise HTTPException(
+            status_code=422,
+            detail="Le produit doit avoir un mockup avant d'être publié."
+        )
+
+    # Sérialiser les variantes
+    variants_data = [
+        {
+            "printful_variant_id": v.printful_variant_id,
+            "color": v.color,
+            "size": v.size,
+            "price": v.price,
+        }
+        for v in product.variants
+    ]
+    variants_json_str = json.dumps(variants_data)
+
+    # Chercher un CatalogueItem déjà lié (par product_id dans design_url comme ref)
+    # On utilise printful_variant_id de la première variante comme clé de dédup
+    first_vid = product.variants[0].printful_variant_id if product.variants else None
+    existing_item: Optional[CatalogueItem] = None
+    if first_vid:
+        existing_item = (await db.execute(
+            select(CatalogueItem).where(CatalogueItem.printful_variant_id == first_vid)
+        )).scalar_one_or_none()
+
+    if existing_item:
+        existing_item.title = product.name
+        existing_item.image_url = product.mockup_url
+        existing_item.price = product.price
+        existing_item.category = product.category
+        existing_item.design_url = product.design_url
+        existing_item.placement_json = product.placement_json
+        existing_item.variants_json = variants_json_str
+        existing_item.status = CatalogueStatus.active
+        item = existing_item
+    else:
+        item = CatalogueItem(
+            title=product.name,
+            image_url=product.mockup_url,
+            price=product.price,
+            category=product.category,
+            status=CatalogueStatus.active,
+            printful_variant_id=first_vid,
+            variants_json=variants_json_str,
+            design_url=product.design_url,
+            placement_json=product.placement_json,
+        )
+        db.add(item)
+
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+# ─── Designs Shop (assets graphiques) ─────────────────────────────────────
+
+_DESIGNS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    "static", "designs"
+)
+os.makedirs(_DESIGNS_DIR, exist_ok=True)
+
+
+class ShopDesignOut(BaseModel):
+    id: int
+    filename: str
+    url: str
+    dpi: Optional[float]
+    print_ready: bool
+    bg_removed: bool
+    upscaled: bool
+    vectorized: bool
+    created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj: ShopDesign) -> "ShopDesignOut":  # type: ignore[override]
+        return cls(
+            id=obj.id, filename=obj.filename, url=obj.url, dpi=obj.dpi,
+            print_ready=bool(obj.print_ready), bg_removed=bool(obj.bg_removed),
+            upscaled=bool(obj.upscaled), vectorized=bool(obj.vectorized),
+            created_at=obj.created_at,
+        )
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/designs-shop", dependencies=[Depends(verify_admin_token)])
+async def list_shop_designs(db: DBDep) -> list:
+    result = await db.execute(
+        select(ShopDesign).order_by(ShopDesign.created_at.desc())
+    )
+    designs = result.scalars().all()
+    return [
+        {
+            "id": d.id, "filename": d.filename, "url": d.url, "dpi": d.dpi,
+            "print_ready": bool(d.print_ready), "bg_removed": bool(d.bg_removed),
+            "upscaled": bool(d.upscaled), "vectorized": bool(d.vectorized),
+            "created_at": d.created_at.isoformat(),
+        }
+        for d in designs
+    ]
+
+
+@router.post("/designs-shop/upload", dependencies=[Depends(verify_admin_token)])
+async def upload_shop_design(file: UploadFile = File(...)):
+    """Upload d'un asset graphique pour application sur produits Printful."""
+    from app.database import SessionLocal
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".svg"):
+        raise HTTPException(status_code=400, detail="Format non supporté. Utilisez JPG, PNG, WEBP ou SVG.")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(_DESIGNS_DIR, filename)
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Fichier trop lourd (max 20 Mo).")
+    with open(dest, "wb") as f:
+        f.write(content)
+
+    dpi_val: Optional[float] = None
+    print_ready = False
+    if ext != ".svg":
+        from app.services.fixer.image_utils import validate_and_open_image
+        try:
+            img = await asyncio.to_thread(validate_and_open_image, content)
+            raw_dpi = img.info.get("dpi", (72, 72))
+            dpi_val = round(float(raw_dpi[0]))
+            print_ready = dpi_val >= 300
+        except Exception:
+            pass
+    else:
+        print_ready = True  # SVG = vectoriel = toujours print-ready
+
+    async with SessionLocal() as db:
+        design = ShopDesign(
+            filename=filename,
+            url=f"/static/designs/{filename}",
+            dpi=dpi_val,
+            print_ready=1 if print_ready else 0,
+        )
+        db.add(design)
+        await db.commit()
+        await db.refresh(design)
+        return {
+            "id": design.id, "filename": design.filename, "url": design.url,
+            "dpi": design.dpi, "print_ready": bool(design.print_ready),
+            "bg_removed": False, "upscaled": False, "vectorized": False,
+            "created_at": design.created_at.isoformat(),
+        }
+
+
+@router.post("/designs-shop/{design_id}/process", dependencies=[Depends(verify_admin_token)])
+async def process_shop_design(
+    design_id: int,
+    db: DBDep,
+    remove_bg: bool = Body(False),
+    upscale: bool = Body(True),
+    vectorize: bool = Body(False),
+):
+    """Pipeline de traitement d'un asset : remove_bg, upscale 300 DPI, vectorize SVG."""
+    design = await db.get(ShopDesign, design_id)
+    if not design:
+        raise HTTPException(status_code=404, detail="Design introuvable.")
+
+    from app.services.fixer.image_utils import (
+        remove_background, upscale_to_print, vectorize_to_svg, validate_and_open_image
+    )
+    import io
+
+    with open(os.path.join(_DESIGNS_DIR, design.filename), "rb") as f:
+        content = f.read()
+
+    img_data = content
+    bg_removed = bool(design.bg_removed)
+    was_upscaled = bool(design.upscaled)
+    was_vectorized = bool(design.vectorized)
+    new_filename = design.filename
+    ext = os.path.splitext(design.filename)[1].lower()
+
+    try:
+        if remove_bg and ext != ".svg":
+            img_data = await asyncio.to_thread(remove_background, img_data)
+            # Autocrop : supprimer les marges transparentes après suppression fond
+            def _autocrop(data: bytes) -> bytes:
+                from PIL import Image as _PImage
+                from app.services.fixer.image_utils import autocrop_transparent
+                import io as _io
+                pil_img = _PImage.open(_io.BytesIO(data)).convert("RGBA")
+                cropped = autocrop_transparent(pil_img)
+                buf = _io.BytesIO()
+                cropped.save(buf, format="PNG")
+                return buf.getvalue()
+            img_data = await asyncio.to_thread(_autocrop, img_data)
+            bg_removed = True
+        if upscale and not vectorize and ext != ".svg":
+            def _upscale_bytes(data: bytes) -> bytes:
+                from app.services.fixer.image_utils import validate_and_open_image, upscale_to_print
+                import io as _io
+                pil_img = validate_and_open_image(data)
+                upscaled = upscale_to_print(pil_img)
+                buf = _io.BytesIO()
+                fmt = pil_img.format or "PNG"
+                upscaled.save(buf, format=fmt, dpi=(300, 300))
+                return buf.getvalue()
+            img_data = await asyncio.to_thread(_upscale_bytes, img_data)
+            was_upscaled = True
+        if vectorize and ext != ".svg":
+            svg_bytes = await asyncio.to_thread(vectorize_to_svg, img_data)
+            new_filename = os.path.splitext(design.filename)[0] + ".svg"
+            with open(os.path.join(_DESIGNS_DIR, new_filename), "wb") as f:
+                f.write(svg_bytes)
+            was_vectorized = True
+            was_upscaled = False
+            img_data = svg_bytes
+        else:
+            with open(os.path.join(_DESIGNS_DIR, new_filename), "wb") as f:
+                f.write(img_data)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur traitement image : {exc}")
+
+    # Recalculer DPI si raster
+    dpi_val = design.dpi
+    print_ready = bool(design.print_ready)
+    if not was_vectorized and ext != ".svg":
+        try:
+            img = await asyncio.to_thread(validate_and_open_image, img_data)
+            raw_dpi = img.info.get("dpi", (72, 72))
+            dpi_val = round(float(raw_dpi[0]))
+            print_ready = dpi_val >= 300
+        except Exception:
+            pass
+    elif was_vectorized:
+        print_ready = True
+
+    design.filename = new_filename
+    design.url = f"/static/designs/{new_filename}"
+    design.dpi = dpi_val
+    design.print_ready = 1 if print_ready else 0
+    design.bg_removed = 1 if bg_removed else 0
+    design.upscaled = 1 if was_upscaled else 0
+    design.vectorized = 1 if was_vectorized else 0
+    await db.commit()
+    await db.refresh(design)
+    return {
+        "id": design.id, "filename": design.filename, "url": design.url,
+        "dpi": design.dpi, "print_ready": bool(design.print_ready),
+        "bg_removed": bool(design.bg_removed), "upscaled": bool(design.upscaled),
+        "vectorized": bool(design.vectorized),
+        "created_at": design.created_at.isoformat(),
+    }
+
+
+@router.delete("/designs-shop/{design_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_shop_design(design_id: int, db: DBDep):
+    design = await db.get(ShopDesign, design_id)
+    if not design:
+        raise HTTPException(status_code=404, detail="Design introuvable.")
+    # Supprimer le fichier physique
+    try:
+        os.remove(os.path.join(_DESIGNS_DIR, design.filename))
+    except OSError:
+        pass
+    await db.delete(design)
+    await db.commit()
+    return {"deleted": design_id}
 
 
 # ─── Codes Promo ────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { assetUrl } from "@/lib/utils";
 import { useParams, useRouter } from "next/navigation";
 import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
@@ -12,6 +13,16 @@ import { CyberCard } from "@/components/public/CyberCard";
 import { useGetPublicCatalogueByIdQuery, useGetPublicCatalogueQuery } from "@/lib/publicApi";
 import { useAppDispatch } from "@/lib/hooks";
 import { addItem } from "@/lib/slices/cartSlice";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface CatalogueVariant {
+    id: number;
+    printful_variant_id: string;
+    color: string | null;
+    size: string | null;
+    price: number;
+}
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,6 +65,36 @@ export default function ShopSlugPage() {
 
     const item = data?.result ?? null;
 
+    // ── Variants parsing ──────────────────────────────────────────────────────
+    const variants = useMemo<CatalogueVariant[]>(() => {
+        if (!item?.variants_json) return [];
+        try { return JSON.parse(item.variants_json) as CatalogueVariant[]; } catch { return []; }
+    }, [item]);
+
+    const uniqueColors = useMemo(() => {
+        const seen = new Set<string>();
+        return variants.filter((v) => v.color && !seen.has(v.color) && seen.add(v.color)).map((v) => v.color!);
+    }, [variants]);
+
+    const [selectedColor, setSelectedColor] = useState<string | null>(null);
+    const [selectedSize, setSelectedSize] = useState<string | null>(null);
+
+    const effectiveColor = selectedColor ?? uniqueColors[0] ?? null;
+
+    const sizesForColor = useMemo(() =>
+        [...new Set(variants.filter((v) => !effectiveColor || v.color === effectiveColor).map((v) => v.size).filter(Boolean) as string[])],
+        [variants, effectiveColor]
+    );
+
+    const effectiveSize = selectedSize && sizesForColor.includes(selectedSize) ? selectedSize : (sizesForColor[0] ?? null);
+
+    const selectedVariant = useMemo(() =>
+        variants.find((v) => v.color === effectiveColor && v.size === effectiveSize) ?? variants[0] ?? null,
+        [variants, effectiveColor, effectiveSize]
+    );
+
+    const displayPrice = selectedVariant?.price ?? item?.price ?? 0;
+
     const [added, setAdded] = useState(false);
 
     // Similar products
@@ -67,18 +108,20 @@ export default function ShopSlugPage() {
 
     function handleAddToCart() {
         if (!item) return;
-        const variantId = item.printful_variant_id ? parseInt(item.printful_variant_id, 10) : item.id;
+        const variantId = selectedVariant?.printful_variant_id
+            ? parseInt(selectedVariant.printful_variant_id, 10)
+            : (item.printful_variant_id ? parseInt(item.printful_variant_id, 10) : item.id);
         dispatch(
             addItem({
                 id: `${item.id}-${variantId}`,
                 productId: item.id,
                 variantId,
                 name: item.title,
-                size: "",
-                color: "",
+                size: effectiveSize ?? "",
+                color: effectiveColor ?? "",
                 colorCode: "#333333",
                 thumbnailUrl: item.image_url,
-                price: item.price,
+                price: displayPrice,
                 quantity: 1,
             })
         );
@@ -142,12 +185,13 @@ export default function ShopSlugPage() {
                             <div className="relative w-full aspect-square bg-[#0A0E14] border border-[#00F0FF]/30 overflow-hidden group">
                                 {item.image_url ? (
                                     <Image
-                                        src={item.image_url}
+                                        src={assetUrl(item.image_url)}
                                         alt={item.title}
                                         fill
                                         sizes="(max-width: 768px) 100vw, 50vw"
                                         className="object-contain transition-transform duration-300 group-hover:scale-105"
                                         priority
+                                        unoptimized={item.image_url.startsWith("/static")}
                                     />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-[#00F0FF]/20 font-mono text-xs uppercase tracking-widest">
@@ -200,10 +244,62 @@ export default function ShopSlugPage() {
                                     </div>
                                 </TerminalWindow>
 
+                                {/* ── Variant selector ── */}
+                                {variants.length > 0 && (
+                                    <div className="space-y-3">
+                                        {/* Colors */}
+                                        {uniqueColors.length > 0 && (
+                                            <div>
+                                                <p className="font-mono text-[10px] text-[#555] uppercase tracking-widest mb-2">
+                                                    COULEUR — <span className="text-[#00F0FF]">{effectiveColor}</span>
+                                                </p>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {uniqueColors.map((color) => (
+                                                        <button
+                                                            key={color}
+                                                            onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
+                                                            className="h-6 px-3 rounded font-mono text-[10px] uppercase tracking-wider transition-all"
+                                                            style={{
+                                                                background: effectiveColor === color ? "var(--neon-blue, #00F0FF)" : "transparent",
+                                                                border: `1px solid ${effectiveColor === color ? "var(--neon-blue, #00F0FF)" : "#333"}`,
+                                                                color: effectiveColor === color ? "#000" : "#888",
+                                                            }}>
+                                                            {color}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Sizes */}
+                                        {sizesForColor.length > 0 && (
+                                            <div>
+                                                <p className="font-mono text-[10px] text-[#555] uppercase tracking-widest mb-2">
+                                                    TAILLE — <span className="text-[#00F0FF]">{effectiveSize}</span>
+                                                </p>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {sizesForColor.map((size) => (
+                                                        <button
+                                                            key={size}
+                                                            onClick={() => setSelectedSize(size)}
+                                                            className="h-8 px-3 rounded font-mono text-xs uppercase tracking-wider transition-all"
+                                                            style={{
+                                                                background: effectiveSize === size ? "transparent" : "transparent",
+                                                                border: `1px solid ${effectiveSize === size ? "var(--neon-orange, #FF6B00)" : "#333"}`,
+                                                                color: effectiveSize === size ? "var(--neon-orange, #FF6B00)" : "#666",
+                                                            }}>
+                                                            {size}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Price */}
                                 <div className="flex items-baseline gap-3">
                                     <span className="font-mono text-2xl text-white font-bold">
-                                        {item.price > 0 ? `${item.price.toFixed(2)}€` : "---"}
+                                        {displayPrice > 0 ? `${displayPrice.toFixed(2)}€` : "---"}
                                     </span>
                                     <span className="font-mono text-[10px] text-[#555] uppercase">TTC</span>
                                 </div>
@@ -240,7 +336,7 @@ export default function ShopSlugPage() {
                                         <Link key={p.id} href={`/shop/${p.id}`} className="block">
                                             <CyberCard
                                                 name={p.title}
-                                                thumbnailUrl={p.image_url}
+                                                thumbnailUrl={assetUrl(p.image_url) || null}
                                                 detail1={`ID: ${p.id}`}
                                                 detail2={p.category ?? "Print-on-Demand"}
                                                 badgeLabel={`${getSoulScore(p.id)}% HUMAN CHAOS`}
