@@ -38,6 +38,7 @@ typing_extensions==4.15.0
 WTForms==3.1.2
 celery==5.6.3
 redis==7.4.0
+bcrypt==5.0.0
 python-dotenv==1.2.2
 scikit-image==0.25.2
 numpy==2.2.6

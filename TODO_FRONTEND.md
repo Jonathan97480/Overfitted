@@ -36,7 +36,7 @@ Badge chaos   : "[XX% HUMAN CHAOS]" en cyan, monospace, style label terminal
 - [x] **Initialiser Next.js 15** — `npx create-next-app@latest frontend --typescript --tailwind --app`
 - [x] **Shadcn/ui** — `npx shadcn@latest init` (thème dark, style "default")
 - [x] **Redux Toolkit + RTK Query** — `npm install @reduxjs/toolkit react-redux`
-- [ ] **Framer Motion** — `npm install framer-motion`
+- [x] **Framer Motion** — `npm install framer-motion`
 - [ ] **i18n (internationalisation FR/EN)** — `npm install next-intl`
   - Fichiers de traduction : `messages/fr.json` + `messages/en.json`
   - Détection automatique de la langue système (`Accept-Language` header) à l'arrivée
@@ -351,11 +351,12 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Page `/` — Home
 > Maquette : 3 T-shirts en vitrine (3D-ish podium), panel IA à droite, collections en bas
-- [ ] **Showcase 3 produits** — T-shirts flottants, labels SYNTAX COLLECTION / HALLUCINATION DROP / PULSE (PROCEDURAL) en bas, couleurs cyan/orange
-- [ ] **Panel droit "AI CHECKER"** — `TerminalWindow` avec lignes : STATUS / FILE / DPI / HUMANITY SCORE / AI ROAST (polling RTK Query si image uploadée)
-- [ ] **Bouton "UPLOAD CREATION (WE DARE YOU)"** — `OvfButton` orange, lien vers `/upload`
-- [ ] **Soul-O-Meter panel** — `CircularGauge` + `BeforeAfterSlider` + `MemoryGraph` + bouton "OVERFIT ME"
-- [ ] **Footer** — nav secondaire, badge "HUMAN CHAOS APPROVED" (cercle cyan avec silhouette)
+- [x] **Showcase 3 produits** — Carousel rotatif (clic sur label = animation spring), produits réels DB via RTK Query, labels SYNTAX COLLECTION / HALLUCINATION DROP / PULSE (PROCEDURAL), produit central en grand + glow orange, latéraux réduits + cyan
+- [x] **Panel droit "AI CHECKER"** — `TerminalWindow` avec lignes : STATUS / FILE / DPI / FORMAT / HUMANITY_SCORE / AI_ROAST + curseur clignotant
+- [x] **Bouton "UPLOAD CREATION (WE DARE YOU)"** — `OvfButton` orange en haut du panneau droit, lien vers `/upload`
+- [x] **Soul-O-Meter panel** — `CircularGauge` + Before/After + bouton "OVERFIT ME (FIX THE DESIGN)" fusionné dans le panneau droit
+- [x] **Footer** — nav secondaire, badge "HUMAN CHAOS APPROVED" (cercle cyan avec silhouette)
+- [x] **AppHeader** — logo SVG centré `h-16` + nav 2 lignes + MemoryGraph hydration fix
 
 ---
 

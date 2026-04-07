@@ -1,45 +1,41 @@
-"""Auth SQLAdmin — login/password via variables d'environnement.
+"""Auth SQLAdmin — login/password hashé bcrypt stocké en base de données.
 
-ADMIN_USERNAME et ADMIN_PASSWORD doivent être définis dans .env.
-La session est signée avec SECRET_KEY via itsdangerous.TimestampSigner.
+Le mot de passe n'est JAMAIS stocké en clair (ni en .env, ni en BDD).
+Seul le hash bcrypt est persisté dans la table `admin_users`.
+
+Utiliser backend/app/set_admin_password.py pour initialiser ou changer le mot de passe.
 
 Pattern :
-- login()      → vérifie credentials, pose le cookie signé, retourne True
-- logout()     → supprime le cookie
-- authenticate() → vérifie que le cookie est valide et non expiré
+- login()      → vérifie credentials via BDD + bcrypt, pose le token signé en session
+- logout()     → supprime le token de session
+- authenticate() → vérifie que le token signé est valide et non expiré
 """
 
 import os
+import time
 import hashlib
 import hmac
+
+import bcrypt
+from sqlalchemy import select
 from starlette.requests import Request
 from sqladmin.authentication import AuthenticationBackend
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+from app.database import SessionLocal
+from app.models import AdminUser
+
 SECRET_KEY = os.getenv("SECRET_KEY", "overfitted-dev-secret")
 
 # Durée de session : 8 heures
 _SESSION_MAX_AGE = 8 * 3600
-_COOKIE_NAME = "overfitted_admin_session"
-
-
-def _constant_time_compare(a: str, b: str) -> bool:
-    """Comparaison résistante aux timing attacks."""
-    return hmac.compare_digest(
-        hashlib.sha256(a.encode()).digest(),
-        hashlib.sha256(b.encode()).digest(),
-    )
 
 
 def _sign(value: str) -> str:
-    """Signe value avec SECRET_KEY (HMAC-SHA256)."""
     sig = hmac.new(SECRET_KEY.encode(), value.encode(), hashlib.sha256).hexdigest()
     return f"{value}.{sig}"
 
 
 def _unsign(signed: str) -> str | None:
-    """Vérifie et retourne la valeur signée, ou None si invalide."""
     if "." not in signed:
         return None
     value, sig = signed.rsplit(".", 1)
@@ -50,41 +46,42 @@ def _unsign(signed: str) -> str | None:
 
 
 class AdminAuth(AuthenticationBackend):
-    """Backend d'authentification SQLAdmin — credentials depuis les variables d'env.
+    """Backend d'authentification SQLAdmin.
 
-    Configuration requise dans .env :
-        ADMIN_USERNAME=admin
-        ADMIN_PASSWORD=<mot_de_passe_fort>
-        SECRET_KEY=<clé_secrète_longue>
-
-    Si ADMIN_USERNAME ou ADMIN_PASSWORD est vide, l'accès admin est refusé
-    pour éviter qu'un oubli de config ouvre l'admin en prod.
+    Le mot de passe est vérifié contre le hash bcrypt stocké en BDD.
+    Initialiser avec : python -m app.set_admin_password
     """
 
     async def login(self, request: Request) -> bool:
-        if not ADMIN_USERNAME or not ADMIN_PASSWORD:
-            return False
-
         form = await request.form()
-        username = str(form.get("username", ""))
+        username = str(form.get("username", "")).strip()
         password = str(form.get("password", ""))
 
-        username_ok = _constant_time_compare(username, ADMIN_USERNAME)
-        password_ok = _constant_time_compare(password, ADMIN_PASSWORD)
+        if not username or not password:
+            return False
 
-        if username_ok and password_ok:
-            import time
-            token = _sign(f"admin:{int(time.time())}")
-            request.session["admin_token"] = token
-            return True
-        return False
+        async with SessionLocal() as session:
+            result = await session.execute(
+                select(AdminUser).where(AdminUser.username == username)
+            )
+            admin = result.scalar_one_or_none()
+
+        if admin is None:
+            # Hash factice pour éviter les timing attacks (user enumeration)
+            bcrypt.checkpw(b"dummy", bcrypt.hashpw(b"dummy", bcrypt.gensalt()))
+            return False
+
+        if not bcrypt.checkpw(password.encode(), admin.hashed_password.encode()):
+            return False
+
+        token = _sign(f"admin:{int(time.time())}")
+        request.session["admin_token"] = token
+        return True
 
     async def logout(self, request: Request) -> None:
         request.session.pop("admin_token", None)
 
     async def authenticate(self, request: Request) -> bool:
-        import time
-
         token = request.session.get("admin_token")
         if not token:
             return False
@@ -93,7 +90,6 @@ class AdminAuth(AuthenticationBackend):
         if not value:
             return False
 
-        # Vérifier l'expiration
         try:
             _, ts_str = value.split(":", 1)
             issued_at = int(ts_str)

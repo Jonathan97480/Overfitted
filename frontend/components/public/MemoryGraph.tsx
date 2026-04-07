@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -8,20 +8,26 @@ interface Props {
     color?: string;
 }
 
-function generateWave(count = 40): number[] {
+function generateWave(count = 40, withNoise = true): number[] {
     return Array.from(
         { length: count },
         (_, i) =>
             Math.sin(i * 0.45) * 0.35 +
             Math.sin(i * 1.2) * 0.25 +
             Math.sin(i * 0.15) * 0.2 +
-            (Math.random() - 0.5) * 0.25
+            (withNoise ? (Math.random() - 0.5) * 0.25 : 0)
     );
 }
 
 export function MemoryGraph({ values, className, color = "#FF6B00" }: Props) {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const data = useMemo(() => values ?? generateWave(), []);
+    const staticData = useMemo(() => values ?? generateWave(40, false), [values]);
+    const [data, setData] = useState(staticData);
+
+    useEffect(() => {
+        // Génère la waveform avec Math.random() uniquement côté client
+        setData(values ?? generateWave());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const W = 300;
     const H = 48;
     const step = W / (data.length - 1);
