@@ -3,6 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppSelector } from "@/lib/hooks";
+import { selectCartItemCount } from "@/lib/slices/cartSlice";
 
 const NAV = [
     { label: "HOME", href: "/" },
@@ -14,6 +16,7 @@ const NAV = [
 
 export function AppHeader() {
     const pathname = usePathname();
+    const cartCount = useAppSelector(selectCartItemCount);
 
     return (
         <header className="sticky top-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-sm border-b border-[#00F0FF]/20">
@@ -34,10 +37,15 @@ export function AppHeader() {
                 <div className="absolute right-6 flex items-center gap-5">
                     <Link
                         href="/cart"
-                        className="text-[#888] hover:text-[#00F0FF] transition-colors"
+                        className="relative text-[#888] hover:text-[#00F0FF] transition-colors"
                         aria-label="Panier"
                     >
                         <ShoppingCart size={18} />
+                        {cartCount > 0 && (
+                            <span className="absolute -top-2 -right-2 min-w-[16px] h-4 px-0.5 flex items-center justify-center bg-[#FF6B00] text-white font-mono text-[9px] font-bold rounded-full leading-none">
+                                {cartCount > 99 ? "99+" : cartCount}
+                            </span>
+                        )}
                     </Link>
                     <Link
                         href="/login"

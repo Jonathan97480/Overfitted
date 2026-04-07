@@ -445,28 +445,28 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Emails transactionnels ⚠️ manquants (backend)
 > Fondamentaux pour l'UX e-commerce et les obligations légales.
-- [ ] **Lib backend** — `fastapi-mail` + `jinja2` pour les templates HTML
-- [ ] **`POST /auth/register`** envoie un email de vérification avec lien tokenisé
-- [ ] **Template email** : confirmation inscription ("Bienvenue dans le chaos organique")
-- [ ] **Template email** : vérification adresse email (lien `GET /auth/verify-email?token=xxx`)
-- [ ] **Template email** : confirmation de commande (récapitulatif + lien suivi + lien facture PDF)
-- [ ] **Template email** : expédition (numéro de tracking transporteur)
-- [ ] **Template email** : reset mot de passe (lien `GET /auth/reset-password?token=xxx`)
-- [ ] **`GET /api/admin/email-preview/[template]`** — prévisualisation des templates dans l'admin (section Paramètres)
+- [x] **Lib backend** — `fastapi-mail` + `jinja2` pour les templates HTML
+- [x] **`POST /auth/register`** envoie un email de vérification avec lien tokenisé
+- [x] **Template email** : confirmation inscription ("Bienvenue dans le chaos organique")
+- [x] **Template email** : vérification adresse email (lien `GET /auth/verify-email?token=xxx`)
+- [x] **Template email** : confirmation de commande (récapitulatif + lien suivi + lien facture PDF)
+- [x] **Template email** : expédition (numéro de tracking transporteur)
+- [x] **Template email** : reset mot de passe (lien `GET /auth/reset-password?token=xxx`)
+- [x] **`GET /api/admin/email-preview/[template]`** — prévisualisation des templates dans l'admin (section Paramètres)
 
 ---
 
 ### Page `/verify-email` — Vérification email
-- [ ] `GET /verify-email?token=xxx` → appelle `GET /auth/verify-email?token=xxx` → badge ✓ "Email vérifié" ou erreur "Lien expiré"
-- [ ] Lien "Renvoyer l'email de vérification" si lien expiré
+- [x] `GET /verify-email?token=xxx` → appelle `GET /auth/verify-email?token=xxx` → badge ✓ "Email vérifié" ou erreur "Lien expiré"
+- [x] Lien "Renvoyer l'email de vérification" si lien expiré
 
 ### Page `/forgot-password` — Mot de passe oublié ⚠️ manquant (mentionné dans `/login`)
-- [ ] Formulaire email seul → `POST /auth/forgot-password` → toast "Si cet email existe, un lien vous a été envoyé"
-- [ ] (Message volontairement vague pour éviter l'énumération d'emails — sécurité OWASP)
+- [x] Formulaire email seul → `POST /auth/forgot-password` → toast "Si cet email existe, un lien vous a été envoyé"
+- [x] (Message volontairement vague pour éviter l'énumération d'emails — sécurité OWASP)
 
 ### Page `/reset-password` — Réinitialisation mot de passe ⚠️ manquant
-- [ ] `GET /reset-password?token=xxx` → formulaire nouveau mot de passe + confirmation → `POST /auth/reset-password`
-- [ ] Token expiré → message d'erreur + lien vers `/forgot-password`
+- [x] `GET /reset-password?token=xxx` → formulaire nouveau mot de passe + confirmation → `POST /auth/reset-password`
+- [x] Token expiré → message d'erreur + lien vers `/forgot-password`
 
 ---
 
@@ -474,29 +474,29 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 - [ ] **Page `/checkout`** — redirect vers Stripe Checkout hosted avec `session_id` + code promo appliqué
 
 ### Page `/checkout/success` — Confirmation
-- [ ] **Vérification `session_id`** → `GET /commerce/checkout/confirm?session_id=xxx`
-- [ ] **`TerminalWindow`** : `ORDER_ID / STATUT: PAID / CONFIRMATION ENVOYÉE PAR EMAIL`
-- [ ] **Bouton "TÉLÉCHARGER MA FACTURE (PDF)"** → `GET /commerce/invoice/{order_id}`
-- [ ] **Vider le panier** — `cartSlice.clearCart()` au succès
+- [x] **Vérification `session_id`** → `GET /commerce/checkout/confirm?session_id=xxx`
+- [x] **`TerminalWindow`** : `ORDER_ID / STATUT: PAID / CONFIRMATION ENVOYÉE PAR EMAIL`
+- [x] **Bouton "TÉLÉCHARGER MA FACTURE (PDF)"** → `GET /commerce/invoice/{order_id}`
+- [x] **Vider le panier** — `cartSlice.clearCart()` au succès
 
 ### Page `/checkout/cancel` — Paiement annulé
-- [ ] Redirect `/cart` + toast "Paiement annulé — votre panier est intact"
+- [x] Redirect `/cart` + toast "Paiement annulé — votre panier est intact"
 
 ### Page `/register` — Inscription
-- [ ] **`CyberCard`** centré 420px — champs : `email`, `password`, `confirm_password`, checkbox "J'accepte les CGV" obligatoire
-- [ ] **Validation Zod** — email format, password 8+ chars, passwords identiques, CGV cochées
-- [ ] **RTK Query `POST /auth/register`** — redirect `/` après succès + toast "Bienvenue dans le chaos"
-- [ ] **Lien vers `/login`** en bas du formulaire
+- [x] **`CyberCard`** centré 420px — champs : `email`, `password`, `confirm_password`, checkbox "J'accepte les CGV" obligatoire
+- [x] **Validation Zod** — email format, password 8+ chars, passwords identiques, CGV cochées
+- [x] **RTK Query `POST /auth/register`** — redirect `/` après succès + toast "Bienvenue dans le chaos"
+- [x] **Lien vers `/login`** en bas du formulaire
 
 ### Page `/login` — Connexion
-- [ ] Formulaire email + password, lien "Pas encore de compte ?" → `/register`, lien "Mot de passe oublié ?" → `/forgot-password`
-- [ ] **RTK Query `POST /auth/login`** — JWT stocké en cookie HttpOnly (jamais en localStorage)
-- [ ] **Redirect** vers page précédente après login (param `?next=/cart`)
+- [x] Formulaire email + password, lien "Pas encore de compte ?" → `/register`, lien "Mot de passe oublié ?" → `/forgot-password`
+- [x] **RTK Query `POST /auth/login`** — JWT stocké en cookie HttpOnly (jamais en localStorage)
+- [x] **Redirect** vers page précédente après login (param `?next=/cart`)
 
 ### Page `/cart` — Panier
-- [ ] **Redux slice `cartSlice`** — `items: CartItem[]` (inclut `size`), `promoCode`, `discount`, persistance `localStorage`
-- [ ] **Badge panier** dans `AppHeader` — compteur items dynamique
-- [ ] **Layout 2 colonnes** :
+- [x] **Redux slice `cartSlice`** — `items: CartItem[]` (inclut `size`), `promoCode`, `discount`, persistance `localStorage`
+- [x] **Badge panier** dans `AppHeader` — compteur items dynamique
+- [x] **Layout 2 colonnes** :
   - **Articles** : `CartItemRow` (thumbnail + nom + couleur + **taille** + sélecteur qté −/+ + prix ligne + supprimer), panier vide avec lien `/shop`
   - **Récapitulatif `OrderSummaryCard`** :
     - Sous-total HT
@@ -506,7 +506,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
     - **Total TTC** (montant légal affiché en gras)
     - `PromoCodeInput` — champ + bouton "Appliquer" → `POST /commerce/promo/validate` → badge ✓ vert si valide / erreur inline si invalide ou expiré
     - Bouton CTA "PROCÉDER AU PAIEMENT" orange → `/checkout`
-- [ ] **Middleware** `cartPersistMiddleware` — sync `cartSlice` ↔ `localStorage`
+- [x] **Middleware** `cartPersistMiddleware` — sync `cartSlice` ↔ `localStorage`
 
 ### Page `/account/orders` — Historique & Suivi commandes
 - [ ] **Tableau** : Date | N° Commande | Produit(s) | Montant TTC | Statut | Facture

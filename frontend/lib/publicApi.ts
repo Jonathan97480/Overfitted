@@ -28,6 +28,25 @@ export interface ProductDetail {
     sync_variants: SyncVariant[];
 }
 
+// ─── Auth types ───────────────────────────────────────────────────────────────
+
+export interface RegisterArg {
+    email: string;
+    password: string;
+}
+
+export interface LoginArg {
+    email: string;
+    password: string;
+}
+
+export interface AuthMeResponse {
+    id: number;
+    email: string;
+    display_name: string | null;
+    role: string;
+}
+
 // ─── Upload / Fixer / Soul / Roast types ────────────────────────────────────
 
 export interface UploadImageResponse {
@@ -116,6 +135,52 @@ export const publicApi = createApi({
         getRoastStatus: build.query<TaskStatusResponse, string>({
             query: (taskId) => `/roast/status/${taskId}`,
         }),
+
+        // Auth — register
+        register: build.mutation<{ message: string; user_id: number }, RegisterArg>({
+            query: (body) => ({
+                url: "/auth/register",
+                method: "POST",
+                body,
+                credentials: "include" as RequestCredentials,
+            }),
+        }),
+
+        // Auth — login
+        login: build.mutation<AuthMeResponse, LoginArg>({
+            query: (body) => ({
+                url: "/auth/login",
+                method: "POST",
+                body,
+                credentials: "include" as RequestCredentials,
+            }),
+        }),
+
+        // Auth — me (current user)
+        getMe: build.query<AuthMeResponse, void>({
+            query: () => ({ url: "/auth/me", credentials: "include" as RequestCredentials }),
+        }),
+
+        // Auth — logout
+        logout: build.mutation<void, void>({
+            query: () => ({
+                url: "/auth/logout",
+                method: "POST",
+                credentials: "include" as RequestCredentials,
+            }),
+        }),
+
+        // Promo — valider un code promo
+        validatePromo: build.mutation<
+            { valid: true; discount_type: "percent" | "fixed"; discount_value: number; code: string },
+            { code: string; cart_total: number }
+        >({
+            query: (body) => ({
+                url: "/commerce/promo/validate",
+                method: "POST",
+                body,
+            }),
+        }),
     }),
 });
 
@@ -129,4 +194,9 @@ export const {
     useGetFixerStatusQuery,
     useGetSoulStatusQuery,
     useGetRoastStatusQuery,
+    useRegisterMutation,
+    useLoginMutation,
+    useGetMeQuery,
+    useLogoutMutation,
+    useValidatePromoMutation,
 } = publicApi;
