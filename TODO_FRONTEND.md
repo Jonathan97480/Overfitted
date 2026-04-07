@@ -362,15 +362,15 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Page `/shop` — Prototype Database
 > Maquette : sidebar filtres gauche, grille 2×N de product cards style terminal
-- [ ] **Sidebar "DIAGNOSTIC FILTERS"** (fixe gauche)
+- [x] **Sidebar "DIAGNOSTIC FILTERS"** (fixe gauche) — sticky left, checkboxes custom orange X, slider sarcasm 0-100% avec label niveau, bouton "APPLIQUER LES FILTRES" orange
   - Checkboxes COLLECTIONS : SYNTAX (Human Chaos) / HALLUCINATION (AI) / PULSE (Live Data Stream) — style checkbox custom orange X
   - Checkboxes PRODUCTS : T-SHIRTS PREMIUM / HOODIES OVERSIZE / XXL PAD / STICKERS
   - Slider "SARCASM LEVEL" horizontal 0-100% avec label niveau (`'SEVERE'`, etc.)
   - Bouton "APPLIQUER LES FILTRES" orange
-- [ ] **Header** — "PROTOTYPE DATABASE (N RESULTS)" monospace cyan
-- [ ] **Grille produits 2×N** — `CyberCard` avec window chrome "glitched terminal", contenu : image produit | nom + type + détails | `NeonBadge` [XX% HUMAN CHAOS] | prix | bouton "Ajouter au Diagnostic"
-- [ ] **Redux slice `shopSlice`** — filtres actifs, résultats RTK Query `GET /api/products`
-- [ ] **Statut bar** — "Shop State: READY | Redux RTK Store: ACTIVE"
+- [x] **Header** — "PROTOTYPE DATABASE (N RESULTS)" monospace cyan, compteur filtré dynamique
+- [x] **Grille produits 2×N** — `CyberCard` avec window chrome "glitched terminal", contenu : image produit | nom + type + détails | `NeonBadge` [XX% HUMAN CHAOS] | prix | bouton "Ajouter au Diagnostic"
+- [x] **Redux slice `shopSlice`** — `pendingCollections`, `pendingProductTypes`, `pendingSarcasmLevel`, `applied*` + actions `togglePendingCollection`, `togglePendingProductType`, `setPendingSarcasmLevel`, `applyFilters` — filtrage client-side via `useMemo`
+- [x] **Statut bar** — "Shop State: READY | Redux RTK Store: ACTIVE" — fixée en bas via `position: fixed`
 
 ---
 

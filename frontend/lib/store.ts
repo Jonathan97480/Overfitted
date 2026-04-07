@@ -2,10 +2,12 @@ import { configureStore } from "@reduxjs/toolkit";
 import { adminApi } from "./adminApi";
 import { adminAuthSlice } from "./adminAuthSlice";
 import { publicApi } from "./publicApi";
+import { shopSlice } from "./slices/shopSlice";
 
 export const store = configureStore({
     reducer: {
         adminAuth: adminAuthSlice.reducer,
+        shop: shopSlice.reducer,
         [adminApi.reducerPath]: adminApi.reducer,
         [publicApi.reducerPath]: publicApi.reducer,
     },
