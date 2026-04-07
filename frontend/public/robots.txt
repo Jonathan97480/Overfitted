@@ -1,0 +1,11 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api
+
+# Host
+Host: https://overfitted.io
+
+# Sitemaps
+Sitemap: https://overfitted.io/sitemap.xml

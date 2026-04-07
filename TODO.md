@@ -96,3 +96,4 @@
 - [x] `scikit-image==0.25.2` + `numpy==2.2.6` + `scipy==1.15.3` — Soul-O-Meter
 - [x] `stripe==15.0.1` + `requests==2.33.1` — Commerce
 - [ ] `openai` — optionnel (Roast Engine cloud)
+MP admin temp : Ovf@Glitch2026!

@@ -393,53 +393,53 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 > **Art. L221-28 12° Code de la consommation** : "biens confectionnés selon les spécifications du consommateur".
 > Cette exception doit être affichée clairement sur la page produit et dans les CGV.
 - [x] **Mention visible** sur la page produit : "Ce produit est fabriqué à la demande. Conformément à l'art. L221-28 du Code de la consommation, il ne peut faire l'objet d'un droit de rétractation." — affichée sous le bouton "Ajouter au panier"
-- [ ] Même mention dans les CGV de `/legal`
+- [x] Même mention dans les CGV de `/legal`
 
 ---
 
 ### Page `/about` — À propos ⚠️ manquant (dans la nav)
-- [ ] Pitch de marque : "Critiqué par l'IA, réparé pour les Humains" — style TerminalWindow
-- [ ] Histoire du projet, vision, collections expliquées
-- [ ] Technologie : pipeline Fixer, Soul-O-Meter, Roast Engine — expliqués en mode hacker
-- [ ] CTA bas de page vers `/upload`
+- [x] Pitch de marque : "Critiqué par l'IA, réparé pour les Humains" — style TerminalWindow
+- [x] Histoire du projet, vision, collections expliquées
+- [x] Technologie : pipeline Fixer, Soul-O-Meter, Roast Engine — expliqués en mode hacker
+- [x] CTA bas de page vers `/upload`
 
 ---
 
 ### Page `/contact` — Contact ⚠️ manquant (dans le footer)
 > Obligatoire pour la mention légale LCEN (éditeur joignable).
-- [ ] Formulaire : nom, email, sujet (select), message — validation Zod
-- [ ] Endpoint backend `POST /contact` — envoie un email (lib `fastapi-mail` ou SMTP direct)
-- [ ] Succès : `TerminalWindow` "MESSAGE_SENT: NOUS_AVONS_BIEN_RECU_VOTRE_SIGNAL"
-- [ ] Lien email direct en fallback visible
+- [x] Formulaire : nom, email, sujet (select), message — validation Zod
+- [x] Endpoint backend `POST /contact` — envoie un email (lib `fastapi-mail` ou SMTP direct)
+- [x] Succès : `TerminalWindow` "MESSAGE_SENT: NOUS_AVONS_BIEN_RECU_VOTRE_SIGNAL"
+- [x] Lien email direct en fallback visible
 
 ---
 
 ### Page `/upload` — Diagnostic Terminal
 > Maquette : zone image centrale avec scan, panel BEFORE/AFTER, terminal roast + Soul-O-Meter à droite
-- [ ] **Header section** — "DIAGNOSTIC TERMINAL (RESULTS)" titre monospace cyan
-- [ ] **Zone image centrale** — drag-and-drop + `ScanLineOverlay` vertical cyan animé, bordure neon orange, `TerminalWindow` wrapping
-- [ ] **Panel BEFORE/AFTER** (bas gauche) — `CyberCard` avec titres BEFORE/AFTER, thumbnails, flèche de comparaison
-- [ ] **CTA buttons** — "OVERFIT ME (FIX THE DESIGN)" orange + "RE-UPLOAD (WE DARE YOU)" ghost
-- [ ] **Panel "AI ROAST' TERMINAL"** (droite) — `TerminalWindow` avec STATUS / VERDICT / RESOLUTION: 72 DPI (TRASH)
-- [ ] **Panel "SOUL-O-METER"** (droite bas) — `CircularGauge` + `BeforeAfterSlider` + `MemoryGraph` + bouton OVERFIT ME
-- [ ] **Redux slice `uploadSlice`** — état : `idle | uploading | analyzing | ready | error`, `taskId`, `roastResult`, `soulScore`, `imageUrl`
-- [ ] **RTK Query polling** — `GET /fixer/status/{taskId}` + `GET /soul/status/{taskId}` chaque 2s jusqu'à `ready`
+- [x] **Header section** — "DIAGNOSTIC TERMINAL (RESULTS)" titre monospace cyan
+- [x] **Zone image centrale** — drag-and-drop + `ScanLineOverlay` vertical cyan animé, bordure neon orange, `TerminalWindow` wrapping
+- [x] **Panel BEFORE/AFTER** (bas gauche) — `CyberCard` avec titres BEFORE/AFTER, thumbnails, flèche de comparaison
+- [x] **CTA buttons** — "OVERFIT ME (FIX THE DESIGN)" orange + "RE-UPLOAD (WE DARE YOU)" ghost
+- [x] **Panel "AI ROAST' TERMINAL"** (droite) — `TerminalWindow` avec STATUS / VERDICT / RESOLUTION: 72 DPI (TRASH)
+- [x] **Panel "SOUL-O-METER"** (droite bas) — `CircularGauge` + `BeforeAfterSlider` + `MemoryGraph` + bouton OVERFIT ME
+- [x] **Redux slice `uploadSlice`** — état : `idle | uploading | analyzing | ready | error`, `taskId`, `roastResult`, `soulScore`, `imageUrl`
+- [x] **RTK Query polling** — `GET /fixer/status/{taskId}` + `GET /soul/status/{taskId}` chaque 2s jusqu'à `ready`
 
 ---
 
 ### Page `/design` — Design Toolkit
 > Maquette : toolkit gauche, preview T-shirt centre, AI Validator Terminal droite
-- [ ] **Panel gauche "DESIGN TOOLKIT (v1.0)"**
+- [x] **Panel gauche "DESIGN TOOLKIT (v1.0)"**
   - Section T-SHIRT COLOR : grille de `ColorSwatch` (noir, blanc, gris, cyan, orange×2)
   - Section DESIGN LAYOUT : `VerticalSlider` SCALE + `VerticalSlider` POSITION (labels verticaux)
   - Section ADD SARCASTIC TEXT : textarea monospace "Write your insult here", bordure cyan
-- [ ] **Sélection taille** — intégré dans le toolkit avant "ADD TO CART" (XS→XXL, requis avant ajout panier)
-- [ ] **Preview T-shirt** (centre) — image t-shirt avec design positionné, label du design en cyan sous le visuel (ex: "PROMPT_ENGINEERING_SCUM\n(FLAWED_HUMAN_ART)")
-- [ ] **Panel droit "AI VALIDATOR TERMINAL"** — `TerminalWindow` : STATUS / MESSAGE / Humanity Score
-- [ ] **Panel bas droit "HUMANITY SCORE"** — `CircularGauge` + section TECH GLITCH FILTERS (checkboxes : STATIC_NOISE, COLOR_BLEED, ASCII_OVERLAY) + `MemoryGraph`
-- [ ] **Bouton "ADD TO CART (PURCHASE ORGANIC CHAOS)"** — `OvfButton` orange large, pleine largeur — désactivé tant que taille non choisie
-- [ ] **Statut bar** — "Design State: OK | Redux Store: SYNCED"
-- [ ] **Redux slice `designSlice`** — `selectedColor`, `selectedSize`, `scale`, `position`, `sarcasticText`, `glitchFilters`
+- [x] **Sélection taille** — intégré dans le toolkit avant "ADD TO CART" (XS→XXL, requis avant ajout panier)
+- [x] **Preview T-shirt** (centre) — image t-shirt avec design positionné, label du design en cyan sous le visuel (ex: "PROMPT_ENGINEERING_SCUM\n(FLAWED_HUMAN_ART)")
+- [x] **Panel droit "AI VALIDATOR TERMINAL"** — `TerminalWindow` : STATUS / MESSAGE / Humanity Score
+- [x] **Panel bas droit "HUMANITY SCORE"** — `CircularGauge` + section TECH GLITCH FILTERS (checkboxes : STATIC_NOISE, COLOR_BLEED, ASCII_OVERLAY) + `MemoryGraph`
+- [x] **Bouton "ADD TO CART (PURCHASE ORGANIC CHAOS)"** — `OvfButton` orange large, pleine largeur — désactivé tant que taille non choisie
+- [x] **Statut bar** — "Design State: OK | Redux Store: SYNCED"
+- [x] **Redux slice `designSlice`** — `selectedColor`, `selectedSize`, `scale`, `position`, `sarcasticText`, `glitchFilters`
 
 ---
 

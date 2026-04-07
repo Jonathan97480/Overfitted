@@ -333,39 +333,39 @@ export default function ShopSlugPage() {
                                     <div className="flex gap-2 flex-wrap">
                                         {availableSizes.length > 0
                                             ? availableSizes.map(({ size, available }) => (
-                                                  <button
-                                                      key={size}
-                                                      type="button"
-                                                      disabled={!available}
-                                                      onClick={() => setSelectedSize(size)}
-                                                      title={!available ? "Épuisé" : size}
-                                                      className={cn(
-                                                          "font-mono text-[10px] uppercase w-10 h-10 border transition-all",
-                                                          selectedSize === size
-                                                              ? "border-[#FF6B00] text-[#FF6B00] bg-[#FF6B00]/10 shadow-[0_0_10px_rgba(255,107,0,0.3)]"
-                                                              : available
-                                                              ? "border-[#333] text-[#C0C0C0] hover:border-[#00F0FF]/60 hover:text-white"
-                                                              : "border-[#222] text-[#333] cursor-not-allowed line-through"
-                                                      )}
-                                                  >
-                                                      {size}
-                                                  </button>
-                                              ))
+                                                <button
+                                                    key={size}
+                                                    type="button"
+                                                    disabled={!available}
+                                                    onClick={() => setSelectedSize(size)}
+                                                    title={!available ? "Épuisé" : size}
+                                                    className={cn(
+                                                        "font-mono text-[10px] uppercase w-10 h-10 border transition-all",
+                                                        selectedSize === size
+                                                            ? "border-[#FF6B00] text-[#FF6B00] bg-[#FF6B00]/10 shadow-[0_0_10px_rgba(255,107,0,0.3)]"
+                                                            : available
+                                                                ? "border-[#333] text-[#C0C0C0] hover:border-[#00F0FF]/60 hover:text-white"
+                                                                : "border-[#222] text-[#333] cursor-not-allowed line-through"
+                                                    )}
+                                                >
+                                                    {size}
+                                                </button>
+                                            ))
                                             : SIZES.map((size) => (
-                                                  <button
-                                                      key={size}
-                                                      type="button"
-                                                      onClick={() => setSelectedSize(size)}
-                                                      className={cn(
-                                                          "font-mono text-[10px] uppercase w-10 h-10 border transition-all",
-                                                          selectedSize === size
-                                                              ? "border-[#FF6B00] text-[#FF6B00] bg-[#FF6B00]/10"
-                                                              : "border-[#333] text-[#C0C0C0] hover:border-[#00F0FF]/60"
-                                                      )}
-                                                  >
-                                                      {size}
-                                                  </button>
-                                              ))}
+                                                <button
+                                                    key={size}
+                                                    type="button"
+                                                    onClick={() => setSelectedSize(size)}
+                                                    className={cn(
+                                                        "font-mono text-[10px] uppercase w-10 h-10 border transition-all",
+                                                        selectedSize === size
+                                                            ? "border-[#FF6B00] text-[#FF6B00] bg-[#FF6B00]/10"
+                                                            : "border-[#333] text-[#C0C0C0] hover:border-[#00F0FF]/60"
+                                                    )}
+                                                >
+                                                    {size}
+                                                </button>
+                                            ))}
                                     </div>
                                 </div>
 
@@ -378,8 +378,8 @@ export default function ShopSlugPage() {
                                         added
                                             ? "(DIAGNOSTIC UPDATED)"
                                             : !selectedSize
-                                            ? "(CHOISIR UNE TAILLE D'ABORD)"
-                                            : "(PURCHASE ORGANIC CHAOS)"
+                                                ? "(CHOISIR UNE TAILLE D'ABORD)"
+                                                : "(PURCHASE ORGANIC CHAOS)"
                                     }
                                 >
                                     {added ? "AJOUTÉ AU DIAGNOSTIC ✓" : "AJOUTER AU PANIER"}

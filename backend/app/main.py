@@ -17,6 +17,7 @@ from app.services.commerce.router import router as commerce_router
 from app.services.admin_api.router import router as admin_router
 from app.services.auth.router import router as auth_router
 from app.services.printful.router import router as printful_router
+from app.services.contact.router import router as contact_router
 from app.middleware.analytics import AnalyticsMiddleware
 
 load_dotenv()
@@ -62,7 +63,17 @@ async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(
     try:
         file_bytes = await file.read()
         img = await asyncio.to_thread(validate_and_open_image, file_bytes)
-        return {"filename": file.filename, "format": img.format, "size": img.size}
+        from app.services.fixer.image_utils import check_print_ready
+        raw_dpi = img.info.get("dpi", (72, 72))
+        dpi = [round(float(raw_dpi[0])), round(float(raw_dpi[1]))]
+        print_ready = check_print_ready(img)
+        return {
+            "filename": file.filename,
+            "format": img.format,
+            "size": list(img.size),
+            "dpi": dpi,
+            "print_ready": print_ready,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -85,6 +96,7 @@ app.include_router(commerce_router)
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(printful_router)
+app.include_router(contact_router)
 
 # --- Fichiers statiques (images catalogue, etc.) ---
 _static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")

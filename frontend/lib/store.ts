@@ -4,12 +4,16 @@ import { adminAuthSlice } from "./adminAuthSlice";
 import { publicApi } from "./publicApi";
 import { shopSlice } from "./slices/shopSlice";
 import { cartSlice } from "./slices/cartSlice";
+import { uploadSlice } from "./slices/uploadSlice";
+import { designSlice } from "./slices/designSlice";
 
 export const store = configureStore({
     reducer: {
         adminAuth: adminAuthSlice.reducer,
         shop: shopSlice.reducer,
         cart: cartSlice.reducer,
+        upload: uploadSlice.reducer,
+        design: designSlice.reducer,
         [adminApi.reducerPath]: adminApi.reducer,
         [publicApi.reducerPath]: publicApi.reducer,
     },
