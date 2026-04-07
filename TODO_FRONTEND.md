@@ -376,15 +376,15 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 
 ### Page `/shop/[slug]` — Détail produit ⚠️ manquant
 > Indispensable — sans cette page, l'utilisateur ne peut pas voir les variantes/tailles avant d'acheter.
-- [ ] **Galerie images** — image principale + thumbnails, zoom au hover
-- [ ] **Infos produit** : nom, catégorie, prix TTC, `NeonBadge` collection, description courte
-- [ ] **Sélection taille** — boutons taille (XS/S/M/L/XL/XXL) avec mise à jour `CartItem.size`, taille épuisée grisée + tooltip
-- [ ] **Sélection couleur** — `ColorSwatch` si plusieurs couleurs disponibles
-- [ ] **Bouton "AJOUTER AU PANIER"** — `OvfButton` orange → dispatch `cartSlice.addItem()`
-- [ ] **Endpoint backend** `GET /api/products/{slug}` — retourne détail + variantes Printful disponibles
-- [ ] **Breadcrumb** : `SHOP > [CATÉGORIE] > [NOM PRODUIT]`
-- [ ] **Produits similaires** — grille 3 produits de la même collection (RTK Query)
-- [ ] **`og:image` + `og:title`** — meta Open Graph pour partage réseaux sociaux
+- [x] **Galerie images** — image principale + thumbnails cliquables, zoom scale au hover (group-hover:scale-105)
+- [x] **Infos produit** : nom, catégorie, prix TTC récupéré via `retail_price` Printful, `NeonBadge` collection détectée depuis le nom du produit
+- [x] **Sélection taille** — boutons taille (XS→3XL) dynamiques selon les `sync_variants` de l'API Printful, épuisés grisés + `line-through` + `cursor-not-allowed`
+- [x] **Sélection couleur** — `ColorSwatch` (composant nouveau) si plusieurs couleurs disponibles, reset de la taille au changement de couleur
+- [x] **Bouton "AJOUTER AU PANIER"** — `OvfButton` orange → dispatch `cartSlice.addItem()`, feedback "AJOUTÉ ✓" 2s, désactivé si taille non choisie
+- [x] **Endpoint backend** — utilise `GET /api/products/{product_id}` déjà existant + `getProductById` RTK Query ajoutée à `publicApi.ts`
+- [x] **Breadcrumb** : `HOME › SHOP › [NOM PRODUIT]` monospace cyan, liens actifs
+- [x] **Produits similaires** — grille 3 `CyberCard` (autres produits de la liste), cliquables vers leur `/shop/{id}`
+- [x] **`og:image` + `og:title`** — `generateMetadata` async dans `layout.tsx` avec fetch SSR Printful + revalidate 3600s
 
 ---
 
@@ -392,7 +392,7 @@ Border-radius      6px (cards), 4px (badges), 8px (modals)
 > Les produits personnalisés (Print-on-Demand avec design custom) sont exclus du droit de rétractation 14j.
 > **Art. L221-28 12° Code de la consommation** : "biens confectionnés selon les spécifications du consommateur".
 > Cette exception doit être affichée clairement sur la page produit et dans les CGV.
-- [ ] **Mention visible** sur la page produit : "Ce produit est fabriqué à la demande. Conformément à l'art. L221-28 du Code de la consommation, il ne peut faire l'objet d'un droit de rétractation."
+- [x] **Mention visible** sur la page produit : "Ce produit est fabriqué à la demande. Conformément à l'art. L221-28 du Code de la consommation, il ne peut faire l'objet d'un droit de rétractation." — affichée sous le bouton "Ajouter au panier"
 - [ ] Même mention dans les CGV de `/legal`
 
 ---
