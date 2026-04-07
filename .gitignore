@@ -41,4 +41,5 @@ coverage/
 
 # Uploaded / generated static files — user content, not tracked in git
 backend/static/catalogue/
+backend/static/designs/
 backend/db.sqlite3
