@@ -114,18 +114,18 @@ function ProductPodium() {
                   )}
                 </div>
                 {isCenter && (
-                <div className="flex flex-col items-center gap-1 mt-1">
-                  <NeonBadge label={isLoading ? "LOADING..." : product ? "IN_STOCK" : "COMING_SOON"} />
-                  {product && (
-                    <span className="font-mono text-[9px] text-white/60 truncate max-w-[120px] text-center">
-                      {product.title}
-                    </span>
-                  )}
-                  {product && (
-                    <span className="font-mono text-[10px] font-bold text-[#FF6B00]">
-                      {product.price.toFixed(2)} €
-                    </span>
-                  )}
+                  <div className="flex flex-col items-center gap-1 mt-1">
+                    <NeonBadge label={isLoading ? "LOADING..." : product ? "IN_STOCK" : "COMING_SOON"} />
+                    {product && (
+                      <span className="font-mono text-[9px] text-white/60 truncate max-w-[120px] text-center">
+                        {product.title}
+                      </span>
+                    )}
+                    {product && (
+                      <span className="font-mono text-[10px] font-bold text-[#FF6B00]">
+                        {product.price.toFixed(2)} €
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
