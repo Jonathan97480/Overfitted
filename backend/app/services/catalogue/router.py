@@ -12,6 +12,7 @@ from typing import Annotated
 
 from app.database import get_db
 from app.models import CatalogueItem, CatalogueStatus, ProductType
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(tags=["catalogue"])
 
@@ -39,6 +40,7 @@ async def list_public_catalogue(
 
     result = await db.execute(
         select(CatalogueItem)
+        .options(selectinload(CatalogueItem.product_type))
         .where(CatalogueItem.status == CatalogueStatus.active)
         .order_by(CatalogueItem.created_at.desc())
         .offset(skip)

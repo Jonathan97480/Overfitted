@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { assetUrl } from "@/lib/utils";
 import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
@@ -12,6 +12,7 @@ import {
     togglePendingProductType,
     setPendingSarcasmLevel,
     applyFilters,
+    initProductTypes,
     ALL_COLLECTIONS,
     ALL_TYPES,
     type CollectionFilter,
@@ -121,6 +122,13 @@ export default function ShopPage() {
     const { data, isLoading } = useGetPublicCatalogueQuery();
     const { data: ptData } = useGetPublicProductTypesQuery();
 
+    // Synchronise les types de produits depuis la DB dès le premier chargement
+    useEffect(() => {
+        if (ptData?.result && ptData.result.length > 0) {
+            dispatch(initProductTypes(ptData.result.map((pt) => pt.name)));
+        }
+    }, [ptData, dispatch]);
+
     // Types de produits depuis la BDD (fallback sur ALL_TYPES si l'API n'est pas disponible)
     const productTypeNames: ProductTypeFilter[] = ptData?.result?.map((pt) => pt.name) ?? ALL_TYPES;
 
@@ -131,9 +139,9 @@ export default function ShopPage() {
             const tagSlug = (item.tags ?? "").split(",")[0].trim().toUpperCase();
             const collection: CollectionFilter =
                 tagSlug.includes("SYNTAX") ? "SYNTAX"
-                : tagSlug.includes("HALLUCINATION") ? "HALLUCINATION"
-                : tagSlug.includes("PULSE") ? "PULSE"
-                : ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
+                    : tagSlug.includes("HALLUCINATION") ? "HALLUCINATION"
+                        : tagSlug.includes("PULSE") ? "PULSE"
+                            : ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
             const productType: string = item.product_type_name ?? "T-SHIRTS PREMIUM";
             const soulScore = getSoulScore(item.id);
             return {

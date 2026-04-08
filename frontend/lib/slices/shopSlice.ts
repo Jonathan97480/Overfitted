@@ -19,15 +19,17 @@ interface ShopState {
     appliedCollections: CollectionFilter[];
     appliedProductTypes: ProductTypeFilter[];
     appliedSarcasmLevel: number;
+    productTypesInitialized: boolean;
 }
 
 const initialState: ShopState = {
     pendingCollections: [...ALL_COLLECTIONS],
-    pendingProductTypes: [...ALL_TYPES],
+    pendingProductTypes: [],      // initialisé depuis la DB via initProductTypes
     pendingSarcasmLevel: 75,
     appliedCollections: [...ALL_COLLECTIONS],
-    appliedProductTypes: [...ALL_TYPES],
+    appliedProductTypes: [],      // [] = affiche tout jusqu'à ce que la DB charge
     appliedSarcasmLevel: 75,
+    productTypesInitialized: false,
 };
 
 export const shopSlice = createSlice({
@@ -60,6 +62,14 @@ export const shopSlice = createSlice({
             state.appliedProductTypes = [...state.pendingProductTypes];
             state.appliedSarcasmLevel = state.pendingSarcasmLevel;
         },
+        // Appelé une seule fois au chargement des types depuis la DB
+        initProductTypes(state, action: PayloadAction<string[]>) {
+            if (!state.productTypesInitialized) {
+                state.pendingProductTypes = [...action.payload];
+                state.appliedProductTypes = [...action.payload];
+                state.productTypesInitialized = true;
+            }
+        },
     },
 });
 
@@ -68,6 +78,7 @@ export const {
     togglePendingProductType,
     setPendingSarcasmLevel,
     applyFilters,
+    initProductTypes,
 } = shopSlice.actions;
 
 export { ALL_COLLECTIONS, ALL_TYPES };
