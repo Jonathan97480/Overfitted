@@ -9,7 +9,8 @@ import { CircularGauge } from "@/components/public/CircularGauge";
 import { MemoryGraph } from "@/components/public/MemoryGraph";
 import { NeonBadge } from "@/components/public/NeonBadge";
 import { ScanLineOverlay } from "@/components/public/ScanLineOverlay";
-import { useGetPublicProductsQuery } from "@/lib/publicApi";
+import { useGetPublicCatalogueQuery, type CatalogueProduct } from "@/lib/publicApi";
+import { assetUrl } from "@/lib/utils";
 
 // ── Labels collections (stables, indépendants des noms DB) ──────────────────
 const COLLECTION_LABELS = [
@@ -19,9 +20,18 @@ const COLLECTION_LABELS = [
 ] as const;
 
 // ── Carousel produits ────────────────────────────────────────────────────────
+
+// Remplit toujours 3 slots : répète le premier item si moins de 3 en BDD
+function fillSlots(items: CatalogueProduct[]): (CatalogueProduct | null)[] {
+  if (items.length === 0) return [null, null, null];
+  const base = items[0];
+  return [items[0] ?? base, items[1] ?? base, items[2] ?? base];
+}
+
 function ProductPodium() {
-  const { data, isLoading } = useGetPublicProductsQuery();
-  const products = data?.result?.slice(0, 3) ?? [];
+  const { data, isLoading } = useGetPublicCatalogueQuery();
+  const raw = data?.result?.slice(0, 3) ?? [];
+  const products = fillSlots(raw);
   const [activeIndex, setActiveIndex] = useState(1);
 
   const n = 3;
@@ -46,7 +56,7 @@ function ProductPodium() {
         {[0, 1, 2].map((i) => {
           const slot = getSlot(i);
           const cfg = SLOT[slot];
-          const product = products[i] ?? null;
+          const product = products[i];
           const isCenter = slot === 0;
           const accent = isCenter ? "#FF6B00" : "#00F0FF";
           const accentGlow = isCenter ? "rgba(255,107,0,0.4)" : "rgba(0,240,255,0.25)";
@@ -86,11 +96,11 @@ function ProductPodium() {
                 <div className={`${isCenter ? "h-44 lg:h-52" : "h-28 lg:h-36"} relative flex items-center justify-center`}>
                   {isLoading ? (
                     <div className="w-8 h-8 border border-current opacity-20 animate-pulse" style={{ color: accent }} />
-                  ) : product?.thumbnail_url ? (
+                  ) : product?.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={product.thumbnail_url}
-                      alt={product.name}
+                      src={assetUrl(product.image_url)}
+                      alt={product.title}
                       className="w-full h-full object-contain"
                       style={isCenter ? { filter: `drop-shadow(0 0 14px ${accent})` } : undefined}
                     />
@@ -104,8 +114,18 @@ function ProductPodium() {
                   )}
                 </div>
                 {isCenter && (
-                  <div className="flex justify-center mt-1">
-                    <NeonBadge label={isLoading ? "LOADING..." : product ? "IN_STOCK" : "COMING_SOON"} />
+                <div className="flex flex-col items-center gap-1 mt-1">
+                  <NeonBadge label={isLoading ? "LOADING..." : product ? "IN_STOCK" : "COMING_SOON"} />
+                  {product && (
+                    <span className="font-mono text-[9px] text-white/60 truncate max-w-[120px] text-center">
+                      {product.title}
+                    </span>
+                  )}
+                  {product && (
+                    <span className="font-mono text-[10px] font-bold text-[#FF6B00]">
+                      {product.price.toFixed(2)} €
+                    </span>
+                  )}
                   </div>
                 )}
               </div>
