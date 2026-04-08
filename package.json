@@ -1,0 +1,13 @@
+{
+  "name": "overfitted",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "predev": "kill-port 3000 8000",
+    "dev": "concurrently --names \"BACK,FRONT\" --prefix-colors \"cyan,magenta\" --kill-others \"cd backend && .venv\\\\Scripts\\\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000\" \"cd frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "kill-port": "^2.0.1"
+  }
+}
