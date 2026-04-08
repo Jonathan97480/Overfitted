@@ -50,6 +50,13 @@ export interface OrderOut {
     created_at: string;
 }
 
+export interface TagOut {
+    id: number;
+    name: string;
+    slug: string;
+    color: string;
+}
+
 export interface ProductVariantOut {
     id: number;
     product_id: number;
@@ -75,6 +82,7 @@ export interface ProductOut {
     mockup_url: string | null;
     placement_json: string | null;
     variants: ProductVariantOut[];
+    tags: TagOut[];
 }
 
 export interface PrintfulCatalogProduct {
@@ -571,6 +579,28 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: (id) => ({ url: `/designs-shop/${id}`, method: "DELETE" }),
             invalidatesTags: ["ShopDesign"],
         }),
+
+        // Tags
+        listTags: build.query<TagOut[], void>({
+            query: () => "/tags",
+            providesTags: ["Tag"],
+        }),
+        createTag: build.mutation<TagOut, { name: string; color?: string }>({
+            query: (body) => ({ url: "/tags", method: "POST", body }),
+            invalidatesTags: ["Tag"],
+        }),
+        updateTag: build.mutation<TagOut, { id: number; name?: string; color?: string }>({
+            query: ({ id, ...body }) => ({ url: `/tags/${id}`, method: "PATCH", body }),
+            invalidatesTags: ["Tag"],
+        }),
+        deleteTag: build.mutation<{ deleted: number }, number>({
+            query: (id) => ({ url: `/tags/${id}`, method: "DELETE" }),
+            invalidatesTags: ["Tag", "Product"],
+        }),
+        setProductTags: build.mutation<ProductOut, { product_id: number; tag_ids: number[] }>({
+            query: ({ product_id, tag_ids }) => ({ url: `/products/${product_id}/tags`, method: "PUT", body: { tag_ids } }),
+            invalidatesTags: ["Product"],
+        }),
     }),
 });
 
@@ -623,6 +653,11 @@ export const {
     useUploadShopDesignMutation,
     useProcessShopDesignMutation,
     useDeleteShopDesignMutation,
+    useListTagsQuery,
+    useCreateTagMutation,
+    useUpdateTagMutation,
+    useDeleteTagMutation,
+    useSetProductTagsMutation,
     useListCatalogueQuery,
     useCreateCatalogueItemMutation,
     useUpdateCatalogueItemMutation,

@@ -1,8 +1,29 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from app.database import Base
+
+# ─── Table d'association Product ↔ Tag ────────────────────────────────────
+product_tags = Table(
+    "product_tags",
+    Base.metadata,
+    Column("product_id", Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Tag(Base):
+    """Tag normalisé, utilisé pour définir les collections sur le front public."""
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    slug = Column(String, unique=True, nullable=False, index=True)
+    color = Column(String, nullable=False, default="#6B7280")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    products = relationship("Product", secondary=product_tags, back_populates="tags", lazy="select")
 
 
 class AdminUser(Base):
@@ -104,6 +125,9 @@ class Product(Base):
     # ── Relation variantes ─────────────────────────────────────────────────
     variants = relationship("ProductVariant", back_populates="product",
                             cascade="all, delete-orphan", lazy="selectin")
+
+    # ── Relation tags ──────────────────────────────────────────────────────
+    tags = relationship("Tag", secondary=product_tags, back_populates="products", lazy="selectin")
 
 
 class ProductVariant(Base):

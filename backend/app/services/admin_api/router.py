@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, ProductVariant, PromoCode, Setting, ShopDesign, User
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, ProductVariant, PromoCode, Setting, ShopDesign, Tag, User, product_tags
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 from app.middleware.analytics import get_top_pages, get_product_views
 
@@ -550,6 +550,14 @@ class ProductVariantOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TagOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    color: str
+    model_config = {"from_attributes": True}
+
+
 class ProductOut(BaseModel):
     id: int
     name: str
@@ -564,6 +572,7 @@ class ProductOut(BaseModel):
     mockup_url: Optional[str] = None
     placement_json: Optional[str] = None
     variants: List[ProductVariantOut] = []
+    tags: List[TagOut] = []
     model_config = {"from_attributes": True}
 
 
@@ -1581,6 +1590,9 @@ async def publish_product(product_id: int, db: DBDep):
             select(CatalogueItem).where(CatalogueItem.printful_variant_id == first_vid)
         )).scalar_one_or_none()
 
+    # Propager les tags du produit vers CatalogueItem.tags (JSON array de slugs)
+    tags_json_str = json.dumps([t.slug for t in product.tags]) if product.tags else None
+
     if existing_item:
         existing_item.title = product.name
         existing_item.image_url = product.mockup_url
@@ -1589,6 +1601,7 @@ async def publish_product(product_id: int, db: DBDep):
         existing_item.design_url = product.design_url
         existing_item.placement_json = product.placement_json
         existing_item.variants_json = variants_json_str
+        existing_item.tags = tags_json_str
         existing_item.status = CatalogueStatus.active
         item = existing_item
     else:
@@ -1602,6 +1615,7 @@ async def publish_product(product_id: int, db: DBDep):
             variants_json=variants_json_str,
             design_url=product.design_url,
             placement_json=product.placement_json,
+            tags=tags_json_str,
         )
         db.add(item)
 

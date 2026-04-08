@@ -29,6 +29,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit, Trash2, Plus, CheckCircle, ImageIcon, RefreshCw, BookOpen, ChevronDown, ChevronRight, Send } from "lucide-react";
+import {
+    useListTagsQuery,
+    useSetProductTagsMutation,
+    type TagOut,
+} from "@/lib/adminEndpoints";
 import { PrintfulCatalogModal } from "./PrintfulCatalogModal";
 import { assetUrl } from "@/lib/utils";
 
@@ -46,12 +51,14 @@ interface FormData {
     design_url: string | null;
     mockup_url: string | null;
     placement_json: string | null;
+    tag_ids: number[];
 }
 
 const EMPTY_FORM: FormData = {
     name: "", category: "", price: "",
     image_url: null, dpi: null, print_ready: false,
     printful_catalog_product_id: null, design_url: null, mockup_url: null, placement_json: null,
+    tag_ids: [],
 };
 
 const CATEGORIES = ["T-Shirt", "Hoodie", "Mug", "Poster", "Sticker", "Pad", "Autre"];
@@ -87,6 +94,17 @@ function InlinePriceCell({ product, onSave }: { product: ProductOut; onSave: (p:
 
 // ── Étape 1 — Infos ─────────────────────────────────────────────────────────
 function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
+    const { data: tags } = useListTagsQuery();
+
+    function toggleTag(id: number) {
+        setForm({
+            ...form,
+            tag_ids: form.tag_ids.includes(id)
+                ? form.tag_ids.filter((t) => t !== id)
+                : [...form.tag_ids, id],
+        });
+    }
+
     return (
         <div className="space-y-4">
             {[
@@ -112,6 +130,32 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
                     </SelectContent>
                 </Select>
             </div>
+            {tags && tags.length > 0 && (
+                <div>
+                    <label className="text-xs text-[var(--admin-muted-2)] mb-2 block">Tags</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {tags.map((tag: TagOut) => {
+                            const selected = form.tag_ids.includes(tag.id);
+                            return (
+                                <button
+                                    key={tag.id}
+                                    type="button"
+                                    onClick={() => toggleTag(tag.id)}
+                                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-all"
+                                    style={{
+                                        background: selected ? tag.color + "40" : tag.color + "15",
+                                        color: tag.color,
+                                        border: `1px solid ${tag.color}${selected ? "90" : "40"}`,
+                                        opacity: selected ? 1 : 0.65,
+                                    }}
+                                >
+                                    {tag.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -527,16 +571,19 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
         design_url: initial?.design_url ?? null,
         mockup_url: initial?.mockup_url ?? null,
         placement_json: initial?.placement_json ?? null,
+        tag_ids: initial?.tags?.map((t) => t.id) ?? [],
     });
     const [createProduct, { isLoading: creating }] = useCreateProductMutation();
     const [updateProduct, { isLoading: updating }] = useUpdateProductMutation();
+    const [setProductTags] = useSetProductTagsMutation();
 
     const step1Valid = form.name.trim().length > 0 && parseFloat(form.price) > 0;
 
     const handleSubmit = async () => {
         try {
+            let productId: number;
             if (isEdit && initial) {
-                await updateProduct({
+                const updated = await updateProduct({
                     id: initial.id, name: form.name, category: form.category || null,
                     design_price_ht: parseFloat(form.price) || 0,
                     image_url: form.image_url,
@@ -545,8 +592,9 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
                     placement_json: form.placement_json,
                     printful_catalog_product_id: form.printful_catalog_product_id,
                 }).unwrap();
+                productId = updated.id;
             } else {
-                await createProduct({
+                const created = await createProduct({
                     name: form.name, category: form.category || null,
                     design_price_ht: parseFloat(form.price) || 0,
                     shop_margin_rate: 0.30, tva_rate: 0.20,
@@ -558,7 +606,9 @@ function ProductFormModal({ open, initial, onClose }: { open: boolean; initial: 
                     printful_catalog_product_id: form.printful_catalog_product_id,
                     variants: [],
                 }).unwrap();
+                productId = created.id;
             }
+            await setProductTags({ product_id: productId, tag_ids: form.tag_ids });
             onClose();
         } catch { /* ignore */ }
     };
