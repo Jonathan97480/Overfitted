@@ -11,10 +11,10 @@ import {
     useProcessCatalogueImageMutation,
     useGenerateMockupMutation,
     useGetMockupTemplatesQuery,
-    useListCatalogueQuery,
+    useListShopDesignsQuery,
     type PrintfulTemplate,
     type ProductOut,
-    type CatalogueItemOut,
+    type ShopDesignOut,
     type ImageProcessResult,
 } from "@/lib/adminEndpoints";
 import {
@@ -122,12 +122,12 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
 // ── Étape 2 — Image ─────────────────────────────────────────────────────────
 function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
     const fileRef = useRef<HTMLInputElement>(null);
-    const [tab, setTab] = useState<"catalogue" | "upload">("catalogue");
+    const [tab, setTab] = useState<"designs" | "upload">("designs");
     const [uploadImage] = useUploadCatalogueImageMutation();
     const [processImage] = useProcessCatalogueImageMutation();
     const [processing, setProcessing] = useState<string | null>(null);
     const [processResult, setProcessResult] = useState<ImageProcessResult | null>(null);
-    const { data: catalogueItems, isLoading: catalogueLoading } = useListCatalogueQuery({ limit: 100 });
+    const { data: shopDesigns, isLoading: shopDesignsLoading } = useListShopDesignsQuery();
 
     const handleFile = async (file: File) => {
         setProcessing("Chargement…");
@@ -153,8 +153,8 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
         } catch { /* ignore */ } finally { setProcessing(null); }
     };
 
-    const pickFromCatalogue = (item: CatalogueItemOut) => {
-        setForm({ ...form, image_url: assetUrl(item.image_url), dpi: 300, print_ready: true });
+    const pickFromDesign = (item: ShopDesignOut) => {
+        setForm({ ...form, image_url: assetUrl(item.url), dpi: item.dpi, print_ready: item.print_ready });
     };
 
     return (
@@ -162,14 +162,14 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
             {/* Onglets */}
             <div className="flex gap-1 p-1 rounded" style={{ background: "var(--admin-bg-2)" }}>
                 <button
-                    onClick={() => setTab("catalogue")}
+                    onClick={() => setTab("designs")}
                     className="flex-1 text-xs py-1.5 rounded transition-colors"
                     style={{
-                        background: tab === "catalogue" ? "var(--admin-accent)" : "transparent",
-                        color: tab === "catalogue" ? "#000" : "var(--admin-muted-2)",
-                        fontWeight: tab === "catalogue" ? 600 : 400,
+                        background: tab === "designs" ? "var(--admin-accent)" : "transparent",
+                        color: tab === "designs" ? "#000" : "var(--admin-muted-2)",
+                        fontWeight: tab === "designs" ? 600 : 400,
                     }}>
-                    Catalogue du site
+                    Design Shop
                 </button>
                 <button
                     onClick={() => setTab("upload")}
@@ -183,28 +183,31 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
                 </button>
             </div>
 
-            {tab === "catalogue" && (
+            {tab === "designs" && (
                 <div className="space-y-3">
-                    {catalogueLoading && <p className="text-xs text-[var(--admin-muted-2)] animate-pulse">Chargement du catalogue…</p>}
-                    {!catalogueLoading && (!catalogueItems || catalogueItems.length === 0) && (
-                        <p className="text-xs text-[var(--admin-muted-2)]">Aucun design dans le catalogue.</p>
+                    {shopDesignsLoading && <p className="text-xs text-[var(--admin-muted-2)] animate-pulse">Chargement des designs…</p>}
+                    {!shopDesignsLoading && (!shopDesigns || shopDesigns.length === 0) && (
+                        <p className="text-xs text-[var(--admin-muted-2)]">Aucun design dans le Design Shop. Uploadez-en depuis la page Design Shop.</p>
                     )}
-                    {catalogueItems && catalogueItems.length > 0 && (
+                    {shopDesigns && shopDesigns.length > 0 && (
                         <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
-                            {catalogueItems.filter(i => i.image_url).map((item) => (
+                            {shopDesigns.map((item) => (
                                 <button
                                     key={item.id}
-                                    onClick={() => pickFromCatalogue(item)}
+                                    onClick={() => pickFromDesign(item)}
                                     className="relative rounded overflow-hidden border-2 transition-all"
                                     style={{
-                                        borderColor: form.image_url === assetUrl(item.image_url) ? "var(--admin-accent)" : "var(--admin-border)",
+                                        borderColor: form.image_url === assetUrl(item.url) ? "var(--admin-accent)" : "var(--admin-border)",
                                         background: "var(--admin-bg-2)",
                                     }}>
-                                    <img src={assetUrl(item.image_url)} alt={item.title} className="w-full h-24 object-contain p-1" />
+                                    <img src={assetUrl(item.url)} alt={item.filename} className="w-full h-24 object-contain p-1" />
                                     <p className="text-[10px] text-center pb-1 px-1 truncate" style={{ color: "var(--admin-muted-2)" }}>
-                                        {item.title}
+                                        {item.filename}
                                     </p>
-                                    {form.image_url === item.image_url && (
+                                    {item.print_ready && (
+                                        <div className="absolute top-1 left-1 bg-green-500 rounded-full w-2 h-2" title="Print ready" />
+                                    )}
+                                    {form.image_url === assetUrl(item.url) && (
                                         <div className="absolute top-1 right-1">
                                             <CheckCircle size={14} className="text-green-400" />
                                         </div>
