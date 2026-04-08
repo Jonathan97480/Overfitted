@@ -1,17 +1,14 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export type CollectionFilter = "SYNTAX" | "HALLUCINATION" | "PULSE";
-export type ProductTypeFilter =
-    | "T-SHIRTS PREMIUM"
-    | "HOODIES OVERSIZE"
-    | "XXL PAD"
-    | "STICKERS";
+export type ProductTypeFilter = string;  // dynamique depuis la BDD (ex: "T-SHIRTS PREMIUM")
 
 const ALL_COLLECTIONS: CollectionFilter[] = ["SYNTAX", "HALLUCINATION", "PULSE"];
+// Valeurs par défaut (fallback si l'API n'est pas disponible)
 const ALL_TYPES: ProductTypeFilter[] = [
     "T-SHIRTS PREMIUM",
     "HOODIES OVERSIZE",
-    "XXL PAD",
+    "XXXL PAD",
     "STICKERS",
 ];
 

@@ -120,6 +120,13 @@ export interface OrderDetail extends UserOrder {
 
 // ─── Catalogue public types ─────────────────────────────────────────────────
 
+export interface ProductTypePublic {
+    id: number;
+    name: string;
+    slug: string;
+    description: string | null;
+}
+
 export interface CatalogueProduct {
     id: number;
     title: string;
@@ -133,6 +140,9 @@ export interface CatalogueProduct {
     design_url: string | null;
     placement_json: string | null;
     created_at: string | null;
+    product_type_id: number | null;
+    product_type_name: string | null;
+    product_type_slug: string | null;
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
@@ -142,7 +152,7 @@ export const publicApi = createApi({
     baseQuery: fetchBaseQuery({
         baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
     }),
-    tagTypes: ["PublicProduct", "CatalogueProduct", "Me"],
+    tagTypes: ["PublicProduct", "CatalogueProduct", "ProductType", "Me"],
     endpoints: (build) => ({
         getPublicProducts: build.query<
             { paging: { total: number; offset: number; limit: number }; result: PublicProduct[] },
@@ -167,6 +177,12 @@ export const publicApi = createApi({
         getPublicCatalogueById: build.query<{ result: CatalogueProduct }, number>({
             query: (id) => `/api/catalogue/public/${id}`,
             providesTags: (_result, _error, id) => [{ type: "CatalogueProduct", id }],
+        }),
+
+        // Types de produits publics
+        getPublicProductTypes: build.query<{ result: ProductTypePublic[] }, void>({
+            query: () => "/api/catalogue/public/product-types",
+            providesTags: ["ProductType"],
         }),
 
         // Upload validation (sync — returns DPI + metadata)
@@ -305,6 +321,7 @@ export const {
     useGetProductByIdQuery,
     useGetPublicCatalogueQuery,
     useGetPublicCatalogueByIdQuery,
+    useGetPublicProductTypesQuery,
     useUploadImageMutation,
     useVectorizeImageMutation,
     useScoreSoulMutation,

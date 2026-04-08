@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus
+from app.models import CatalogueItem, CatalogueStatus, ProductType
 
 router = APIRouter(tags=["catalogue"])
 
@@ -52,6 +52,24 @@ async def list_public_catalogue(
     }
 
 
+@router.get("/api/catalogue/public/product-types")
+async def list_public_product_types(db: DBDep) -> dict:
+    """Liste tous les types de produits disponibles (public, sans authentification)."""
+    result = await db.execute(select(ProductType).order_by(ProductType.name))
+    rows = result.scalars().all()
+    return {
+        "result": [
+            {
+                "id": pt.id,
+                "name": pt.name,
+                "slug": pt.slug,
+                "description": pt.description,
+            }
+            for pt in rows
+        ]
+    }
+
+
 @router.get("/api/catalogue/public/{item_id}")
 async def get_public_catalogue_item(item_id: int, db: DBDep) -> dict[str, Any]:
     """Détail d'un article actif du catalogue (public, sans authentification)."""
@@ -79,4 +97,7 @@ def _serialize(item: CatalogueItem) -> dict[str, Any]:
         "tags": item.tags,
         "printful_variant_id": item.printful_variant_id,
         "created_at": item.created_at.isoformat() if item.created_at else None,
+        "product_type_id": item.product_type_id,
+        "product_type_name": item.product_type.name if item.product_type else None,
+        "product_type_slug": item.product_type.slug if item.product_type else None,
     }

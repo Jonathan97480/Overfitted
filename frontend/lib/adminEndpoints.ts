@@ -57,6 +57,14 @@ export interface TagOut {
     color: string;
 }
 
+export interface ProductTypeOut {
+    id: number;
+    name: string;
+    slug: string;
+    description: string | null;
+    created_at: string;
+}
+
 export interface ProductVariantOut {
     id: number;
     product_id: number;
@@ -123,11 +131,12 @@ export interface CatalogueItemOut {
     price: number;
     category: string | null;
     status: CatalogueStatus;
-    printful_variant_id: string | null;
-    variants_json: string | null;
-    design_url: string | null;
-    placement_json: string | null;
-    tags: string | null;
+    printful_variant_id?: string | null;
+    variants_json?: string | null;
+    design_url?: string | null;
+    placement_json?: string | null;
+    tags?: string | null;
+    product_type_id?: number | null;
     created_at: string;
 }
 
@@ -349,7 +358,7 @@ const adminApiExtended = adminApi.injectEndpoints({
         }),
         createProduct: build.mutation<
             ProductOut,
-            Omit<ProductOut, "id" | "variants"> & { variants?: { printful_variant_id: string; color?: string | null; size?: string | null; printful_cost_ht?: number }[] }
+            Omit<ProductOut, "id" | "variants" | "tags"> & { variants?: { printful_variant_id: string; color?: string | null; size?: string | null; printful_cost_ht?: number }[] }
         >({
             query: (body) => ({ url: "/products", method: "POST", body }),
             invalidatesTags: ["Product"],
@@ -601,6 +610,24 @@ const adminApiExtended = adminApi.injectEndpoints({
             query: ({ product_id, tag_ids }) => ({ url: `/products/${product_id}/tags`, method: "PUT", body: { tag_ids } }),
             invalidatesTags: ["Product"],
         }),
+
+        // Types de produits
+        listProductTypes: build.query<ProductTypeOut[], void>({
+            query: () => "/product-types",
+            providesTags: ["ProductType"],
+        }),
+        createProductType: build.mutation<ProductTypeOut, { name: string; description?: string }>({
+            query: (body) => ({ url: "/product-types", method: "POST", body }),
+            invalidatesTags: ["ProductType"],
+        }),
+        updateProductType: build.mutation<ProductTypeOut, { id: number; name?: string; description?: string }>({
+            query: ({ id, ...body }) => ({ url: `/product-types/${id}`, method: "PATCH", body }),
+            invalidatesTags: ["ProductType"],
+        }),
+        deleteProductType: build.mutation<void, number>({
+            query: (id) => ({ url: `/product-types/${id}`, method: "DELETE" }),
+            invalidatesTags: ["ProductType"],
+        }),
     }),
 });
 
@@ -658,6 +685,10 @@ export const {
     useUpdateTagMutation,
     useDeleteTagMutation,
     useSetProductTagsMutation,
+    useListProductTypesQuery,
+    useCreateProductTypeMutation,
+    useUpdateProductTypeMutation,
+    useDeleteProductTypeMutation,
     useListCatalogueQuery,
     useCreateCatalogueItemMutation,
     useUpdateCatalogueItemMutation,

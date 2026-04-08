@@ -5,7 +5,7 @@ import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
 import { OvfButton } from "@/components/public/OvfButton";
 import { CyberCard } from "@/components/public/CyberCard";
-import { useGetPublicCatalogueQuery } from "@/lib/publicApi";
+import { useGetPublicCatalogueQuery, useGetPublicProductTypesQuery } from "@/lib/publicApi";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
     togglePendingCollection,
@@ -27,17 +27,10 @@ const COLLECTION_META: Record<CollectionFilter, string> = {
     PULSE: "(Live Data Stream)",
 };
 
-const TYPE_PRICES: Record<ProductTypeFilter, number> = {
-    "T-SHIRTS PREMIUM": 29,
-    "HOODIES OVERSIZE": 45,
-    "XXL PAD": 30,
-    "STICKERS": 8,
-};
-
-const TYPE_DETAILS: Record<ProductTypeFilter, { detail1: string; detail2: string }> = {
+const TYPE_DETAILS: Record<string, { detail1: string; detail2: string }> = {
     "T-SHIRTS PREMIUM": { detail1: "Type: Premium DTG", detail2: "Material: 100% Organic" },
     "HOODIES OVERSIZE": { detail1: "Type: Heavy Cotton", detail2: "Vibe: Existential Dread" },
-    "XXL PAD": { detail1: "Type: Live Data Pattern", detail2: "Update: Real-Time" },
+    "XXXL PAD": { detail1: "Type: Live Data Pattern", detail2: "Update: Real-Time" },
     "STICKERS": { detail1: "Type: Die-Cut Vinyl", detail2: "Rarity: Organic Glitch" },
 };
 
@@ -53,14 +46,6 @@ const ROAST_QUOTES = [
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function detectProductType(name: string): ProductTypeFilter {
-    const upper = name.toUpperCase();
-    if (upper.includes("HOODIE")) return "HOODIES OVERSIZE";
-    if (upper.includes("PAD") || upper.includes("TAPIS") || upper.includes("MOUSEPAD")) return "XXL PAD";
-    if (upper.includes("STICKER")) return "STICKERS";
-    return "T-SHIRTS PREMIUM";
-}
 
 function getSoulScore(id: number): number {
     return ((id * 37 + 42) % 30) + 70; // deterministic 70–99
@@ -134,24 +119,40 @@ export default function ShopPage() {
     } = useAppSelector((s) => s.shop);
 
     const { data, isLoading } = useGetPublicCatalogueQuery();
+    const { data: ptData } = useGetPublicProductTypesQuery();
+
+    // Types de produits depuis la BDD (fallback sur ALL_TYPES si l'API n'est pas disponible)
+    const productTypeNames: ProductTypeFilter[] = ptData?.result?.map((pt) => pt.name) ?? ALL_TYPES;
 
     // Enrich products with derived metadata
     const enrichedProducts = useMemo(() => {
         if (!data?.result) return [];
         return data.result.map((item, index) => {
-            const collection = ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
-            const productType = detectProductType(item.title);
+            const tagSlug = (item.tags ?? "").split(",")[0].trim().toUpperCase();
+            const collection: CollectionFilter =
+                tagSlug.includes("SYNTAX") ? "SYNTAX"
+                : tagSlug.includes("HALLUCINATION") ? "HALLUCINATION"
+                : tagSlug.includes("PULSE") ? "PULSE"
+                : ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
+            const productType: string = item.product_type_name ?? "T-SHIRTS PREMIUM";
             const soulScore = getSoulScore(item.id);
-            return { ...item, name: item.title, thumbnail_url: assetUrl(item.image_url), collection, productType, soulScore };
+            return {
+                ...item,
+                name: item.title,
+                thumbnail_url: assetUrl(item.image_url),
+                collection,
+                productType,
+                soulScore,
+            };
         });
     }, [data?.result]);
 
-    // Apply filters
+    // Apply filters — filtre uniquement sur collection + type produit
     const filteredProducts = useMemo(() => {
         return enrichedProducts.filter(
             (p) =>
                 appliedCollections.includes(p.collection) &&
-                appliedProductTypes.includes(p.productType)
+                (appliedProductTypes.length === 0 || appliedProductTypes.includes(p.productType))
         );
     }, [enrichedProducts, appliedCollections, appliedProductTypes]);
 
@@ -190,7 +191,7 @@ export default function ShopPage() {
                         <p className="text-[9px] uppercase tracking-[0.2em] text-[#8B8FA8] mb-1">
                             Products
                         </p>
-                        {ALL_TYPES.map((t) => (
+                        {productTypeNames.map((t) => (
                             <OvfCheckbox
                                 key={t}
                                 checked={pendingProductTypes.includes(t)}
@@ -277,8 +278,7 @@ export default function ShopPage() {
                     ) : (
                         <div className="grid grid-cols-2 gap-4">
                             {filteredProducts.map((product, index) => {
-                                const details = TYPE_DETAILS[product.productType];
-                                const price = TYPE_PRICES[product.productType];
+                                const details = TYPE_DETAILS[product.productType] ?? { detail1: product.productType, detail2: "" };
                                 const badgeLabel = getBadgeLabel(product.collection, product.soulScore);
                                 const roastQuote = ROAST_QUOTES[index % ROAST_QUOTES.length];
                                 const badgeOrange = product.collection === "SYNTAX";
@@ -286,13 +286,14 @@ export default function ShopPage() {
                                 return (
                                     <CyberCard
                                         key={product.id}
+                                        href={`/shop/${product.id}`}
                                         name={product.name}
                                         thumbnailUrl={product.thumbnail_url}
                                         detail1={details.detail1}
                                         detail2={details.detail2}
                                         badgeLabel={badgeLabel}
                                         badgeOrange={badgeOrange}
-                                        price={price}
+                                        price={product.price}
                                         roastQuote={roastQuote}
                                     />
                                 );

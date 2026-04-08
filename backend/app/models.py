@@ -13,6 +13,19 @@ product_tags = Table(
 )
 
 
+class ProductType(Base):
+    """Catégorie de produit physique (ex: T-SHIRTS PREMIUM, HOODIES OVERSIZE)."""
+    __tablename__ = "product_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)          # ex: "T-SHIRTS PREMIUM"
+    slug = Column(String, unique=True, nullable=False, index=True)  # ex: "t-shirts-premium"
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    catalogue_items = relationship("CatalogueItem", back_populates="product_type", lazy="select")
+
+
 class Tag(Base):
     """Tag normalisé, utilisé pour définir les collections sur le front public."""
     __tablename__ = "tags"
@@ -167,7 +180,10 @@ class CatalogueItem(Base):
     design_url = Column(String, nullable=True)   # URL du design source (artwork)
     placement_json = Column(Text, nullable=True)  # JSON placement Printful
     tags = Column(String, nullable=True)  # JSON array sérialisé en String
+    product_type_id = Column(Integer, ForeignKey("product_types.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    product_type = relationship("ProductType", back_populates="catalogue_items", lazy="selectin")
 
 
 class ShopDesign(Base):

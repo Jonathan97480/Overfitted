@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, ProductVariant, PromoCode, Setting, ShopDesign, Tag, User, product_tags
+from app.models import CatalogueItem, CatalogueStatus, Design, DesignStatus, Invoice, Order, OrderStatus, Product, ProductType, ProductVariant, PromoCode, Setting, ShopDesign, Tag, User, product_tags
 from app.services.admin_api.auth import create_admin_token, verify_admin_token, verify_password
 from app.middleware.analytics import get_top_pages, get_product_views
 
@@ -1292,6 +1292,7 @@ class CatalogueItemOut(BaseModel):
     design_url: Optional[str]
     placement_json: Optional[str]
     tags: Optional[str]
+    product_type_id: Optional[int]
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -1308,6 +1309,7 @@ class CatalogueItemCreate(BaseModel):
     design_url: Optional[str] = None
     placement_json: Optional[str] = None
     tags: Optional[str] = None
+    product_type_id: Optional[int] = None
 
 
 class CatalogueItemUpdate(BaseModel):
@@ -1322,6 +1324,7 @@ class CatalogueItemUpdate(BaseModel):
     design_url: Optional[str] = None
     placement_json: Optional[str] = None
     tags: Optional[str] = None
+    product_type_id: Optional[int] = None
 
 
 @router.get("/catalogue", response_model=list[CatalogueItemOut], dependencies=[Depends(verify_admin_token)])
@@ -1921,6 +1924,81 @@ async def set_product_tags(product_id: int, body: SetProductTagsBody, db: DBDep)
     await db.commit()
     await db.refresh(product)
     return product
+
+
+# ─── Types de Produits ────────────────────────────────────────────────────────
+
+class ProductTypeOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: Optional[str]
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class ProductTypeCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class ProductTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+def _slugify_product_type(value: str) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
+
+@router.get("/product-types", response_model=list[ProductTypeOut], dependencies=[Depends(verify_admin_token)])
+async def list_product_types(db: DBDep):
+    """Liste tous les types de produits."""
+    result = await db.execute(select(ProductType).order_by(ProductType.name))
+    return result.scalars().all()
+
+
+@router.post("/product-types", response_model=ProductTypeOut, status_code=201, dependencies=[Depends(verify_admin_token)])
+async def create_product_type(body: ProductTypeCreate, db: DBDep):
+    """Crée un nouveau type de produit."""
+    slug = _slugify_product_type(body.name)
+    existing = await db.execute(select(ProductType).where(ProductType.slug == slug))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail=f"Type de produit '{body.name}' existe déjà.")
+    pt = ProductType(name=body.name, slug=slug, description=body.description)
+    db.add(pt)
+    await db.commit()
+    await db.refresh(pt)
+    return pt
+
+
+@router.patch("/product-types/{pt_id}", response_model=ProductTypeOut, dependencies=[Depends(verify_admin_token)])
+async def update_product_type(pt_id: int, body: ProductTypeUpdate, db: DBDep):
+    """Met à jour un type de produit."""
+    result = await db.execute(select(ProductType).where(ProductType.id == pt_id))
+    pt = result.scalar_one_or_none()
+    if not pt:
+        raise HTTPException(status_code=404, detail="Type de produit introuvable.")
+    if body.name is not None:
+        pt.name = body.name
+        pt.slug = _slugify_product_type(body.name)
+    if body.description is not None:
+        pt.description = body.description
+    await db.commit()
+    await db.refresh(pt)
+    return pt
+
+
+@router.delete("/product-types/{pt_id}", status_code=204, dependencies=[Depends(verify_admin_token)])
+async def delete_product_type(pt_id: int, db: DBDep):
+    """Supprime un type de produit (les articles liés deviennent product_type_id=NULL)."""
+    result = await db.execute(select(ProductType).where(ProductType.id == pt_id))
+    pt = result.scalar_one_or_none()
+    if not pt:
+        raise HTTPException(status_code=404, detail="Type de produit introuvable.")
+    await db.delete(pt)
+    await db.commit()
 
 
 # ─── Codes Promo ────────────────────────────────────────────────────────────

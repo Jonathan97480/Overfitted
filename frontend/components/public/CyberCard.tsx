@@ -1,10 +1,12 @@
 "use client";
+import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { NeonBadge } from "./NeonBadge";
 import { OvfButton } from "./OvfButton";
 
 interface Props {
+    href?: string;
     name: string;
     thumbnailUrl: string | null;
     detail1: string;
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function CyberCard({
+    href,
     name,
     thumbnailUrl,
     detail1,
@@ -29,14 +32,15 @@ export function CyberCard({
     onAddToCart,
     className,
 }: Props) {
-    return (
-        <div
-            className={cn(
-                "flex flex-col border border-[#00F0FF] bg-[#0D1117] font-mono",
-                "shadow-[0_0_20px_rgba(0,240,255,0.12)]",
-                className
-            )}
-        >
+    const cardClass = cn(
+        "flex flex-col border border-[#00F0FF] bg-[#0D1117] font-mono",
+        "shadow-[0_0_20px_rgba(0,240,255,0.12)]",
+        href && "hover:border-[#FF6B00] hover:shadow-[0_0_20px_rgba(255,107,0,0.2)] transition-colors cursor-pointer",
+        className
+    );
+
+    const content = (
+        <>
             {/* ── Chrome bar ── */}
             <div className="flex items-center justify-between px-3 py-2 bg-[#0A0E14] border-b border-[#00F0FF]/30 select-none flex-shrink-0">
                 <span className="text-[#00F0FF] text-[10px] uppercase tracking-[0.2em]">
@@ -104,6 +108,11 @@ export function CyberCard({
                     </OvfButton>
                 </div>
             </div>
-        </div>
+        </>
     );
+
+    if (href) {
+        return <Link href={href} className={cardClass}>{content}</Link>;
+    }
+    return <div className={cardClass}>{content}</div>;
 }
