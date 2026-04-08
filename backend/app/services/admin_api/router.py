@@ -1836,6 +1836,93 @@ async def delete_shop_design(design_id: int, db: DBDep):
     return {"deleted": design_id}
 
 
+# ─── Tags ───────────────────────────────────────────────────────────────────
+
+import unicodedata
+import re as _re
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.lower().strip()
+    text = _re.sub(r"[^\w\s-]", "", text)
+    text = _re.sub(r"[\s_-]+", "-", text)
+    return _re.sub(r"^-+|-+$", "", text)
+
+
+class TagCreate(BaseModel):
+    name: str
+    color: str = "#6B7280"
+
+
+class TagUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+
+class SetProductTagsBody(BaseModel):
+    tag_ids: List[int]
+
+
+@router.get("/tags", response_model=List[TagOut], dependencies=[Depends(verify_admin_token)])
+async def list_tags(db: DBDep):
+    result = await db.execute(select(Tag).order_by(Tag.name))
+    return result.scalars().all()
+
+
+@router.post("/tags", response_model=TagOut, status_code=201, dependencies=[Depends(verify_admin_token)])
+async def create_tag(body: TagCreate, db: DBDep):
+    slug = _slugify(body.name)
+    existing = (await db.execute(select(Tag).where(Tag.slug == slug))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Un tag avec ce nom existe déjà.")
+    tag = Tag(name=body.name.strip(), slug=slug, color=body.color)
+    db.add(tag)
+    await db.commit()
+    await db.refresh(tag)
+    return tag
+
+
+@router.patch("/tags/{tag_id}", response_model=TagOut, dependencies=[Depends(verify_admin_token)])
+async def update_tag(tag_id: int, body: TagUpdate, db: DBDep):
+    tag = await db.get(Tag, tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag introuvable.")
+    if body.name is not None:
+        tag.name = body.name.strip()
+        tag.slug = _slugify(body.name)
+    if body.color is not None:
+        tag.color = body.color
+    await db.commit()
+    await db.refresh(tag)
+    return tag
+
+
+@router.delete("/tags/{tag_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_tag(tag_id: int, db: DBDep):
+    tag = await db.get(Tag, tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag introuvable.")
+    await db.delete(tag)
+    await db.commit()
+    return {"deleted": tag_id}
+
+
+@router.put("/products/{product_id}/tags", response_model=ProductOut, dependencies=[Depends(verify_admin_token)])
+async def set_product_tags(product_id: int, body: SetProductTagsBody, db: DBDep):
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Produit introuvable.")
+    if body.tag_ids:
+        result = await db.execute(select(Tag).where(Tag.id.in_(body.tag_ids)))
+        product.tags = list(result.scalars().all())
+    else:
+        product.tags = []
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
 # ─── Codes Promo ────────────────────────────────────────────────────────────
 
 class PromoCodeOut(BaseModel):

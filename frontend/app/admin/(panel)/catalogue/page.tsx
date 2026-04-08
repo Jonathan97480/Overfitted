@@ -7,11 +7,45 @@ import {
     useDeleteCatalogueItemMutation,
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
+    useListTagsQuery,
     type CatalogueItemOut,
     type CatalogueStatus,
     type ImageUploadResult,
     type ImageProcessResult,
+    type TagOut,
 } from "@/lib/adminEndpoints";
+
+function TagPillSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const { data: tags } = useListTagsQuery();
+    if (!tags || tags.length === 0) return null;
+    const selected = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    function toggle(slug: string) {
+        const next = selected.includes(slug) ? selected.filter((s) => s !== slug) : [...selected, slug];
+        onChange(next.join(","));
+    }
+    return (
+        <div>
+            <label className="block text-xs text-[var(--admin-muted-2)] mb-2">Tags</label>
+            <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag: TagOut) => {
+                    const active = selected.includes(tag.slug);
+                    return (
+                        <button key={tag.id} type="button" onClick={() => toggle(tag.slug)}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-all"
+                            style={{
+                                background: active ? tag.color + "40" : tag.color + "15",
+                                color: tag.color,
+                                border: `1px solid ${tag.color}${active ? "90" : "40"}`,
+                                opacity: active ? 1 : 0.6,
+                            }}>
+                            {tag.name}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
 import {
     Table,
     TableBody,
@@ -624,26 +658,11 @@ export default function AdminCataloguePage() {
                             </Select>
                         </div>
 
-                        {/* Tags */}
-                        <div>
-                            <label className="block text-xs text-[var(--admin-muted-2)] mb-1">
-                                Tags{" "}
-                                <span className="text-[var(--admin-muted)] font-normal">
-                                    (séparés par des virgules)
-                                </span>
-                            </label>
-                            <input
-                                type="text"
-                                {...field("tags")}
-                                placeholder="glitch, cyberpunk, neural"
-                                style={{
-                                    background: "var(--admin-sidebar)",
-                                    border: "1px solid var(--admin-border)",
-                                    color: "white",
-                                }}
-                                className="w-full px-3 py-2 rounded-md text-sm outline-none focus:ring-2 focus:ring-[var(--admin-accent)]"
-                            />
-                        </div>
+                        {/* Tags — sélecteur pills */}
+                        <TagPillSelector
+                            value={form.tags}
+                            onChange={(v) => setForm((f) => ({ ...f, tags: v }))}
+                        />
 
                         {/* Printful Variant ID */}
                         <div>
