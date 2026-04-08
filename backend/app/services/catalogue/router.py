@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 
 from app.database import get_db
-from app.models import CatalogueItem, CatalogueStatus, ProductType
+from app.models import CatalogueItem, CatalogueStatus, ProductType, Tag
 from sqlalchemy.orm import selectinload
 
 router = APIRouter(tags=["catalogue"])
@@ -68,6 +68,19 @@ async def list_public_product_types(db: DBDep) -> dict:
                 "description": pt.description,
             }
             for pt in rows
+        ]
+    }
+
+
+@router.get("/api/catalogue/public/tags")
+async def list_public_tags(db: DBDep) -> dict:
+    """Liste tous les tags disponibles (public) — utilisés comme Collections dans le shop."""
+    result = await db.execute(select(Tag).order_by(Tag.name))
+    rows = result.scalars().all()
+    return {
+        "result": [
+            {"id": t.id, "name": t.name, "slug": t.slug, "color": t.color}
+            for t in rows
         ]
     }
 

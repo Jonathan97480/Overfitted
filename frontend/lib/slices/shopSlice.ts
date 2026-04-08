@@ -1,9 +1,8 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-export type CollectionFilter = "SYNTAX" | "HALLUCINATION" | "PULSE";
+export type CollectionFilter = string;  // dynamique depuis la DB (slug du tag)
 export type ProductTypeFilter = string;  // dynamique depuis la BDD (ex: "T-SHIRTS PREMIUM")
 
-const ALL_COLLECTIONS: CollectionFilter[] = ["SYNTAX", "HALLUCINATION", "PULSE"];
 // Valeurs par défaut (fallback si l'API n'est pas disponible)
 const ALL_TYPES: ProductTypeFilter[] = [
     "T-SHIRTS PREMIUM",
@@ -16,13 +15,15 @@ interface ShopState {
     selectedCollections: CollectionFilter[];
     selectedProductTypes: ProductTypeFilter[];
     sarcasmLevel: number;
+    collectionsInitialized: boolean;
     productTypesInitialized: boolean;
 }
 
 const initialState: ShopState = {
-    selectedCollections: [...ALL_COLLECTIONS],
+    selectedCollections: [],   // [] = tous les items affichés avant chargement DB
     selectedProductTypes: [],  // [] = tous les produits affichés avant chargement DB
     sarcasmLevel: 75,
+    collectionsInitialized: false,
     productTypesInitialized: false,
 };
 
@@ -51,6 +52,13 @@ export const shopSlice = createSlice({
         setSarcasmLevel(state, action: PayloadAction<number>) {
             state.sarcasmLevel = action.payload;
         },
+        // Appelé une seule fois au chargement des collections (tags) depuis la DB
+        initCollections(state, action: PayloadAction<string[]>) {
+            if (!state.collectionsInitialized) {
+                state.selectedCollections = [...action.payload];
+                state.collectionsInitialized = true;
+            }
+        },
         // Appelé une seule fois au chargement des types depuis la DB
         initProductTypes(state, action: PayloadAction<string[]>) {
             if (!state.productTypesInitialized) {
@@ -65,7 +73,8 @@ export const {
     toggleCollection,
     toggleProductType,
     setSarcasmLevel,
+    initCollections,
     initProductTypes,
 } = shopSlice.actions;
 
-export { ALL_COLLECTIONS, ALL_TYPES };
+export { ALL_TYPES };

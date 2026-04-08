@@ -4,27 +4,20 @@ import { assetUrl } from "@/lib/utils";
 import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
 import { CyberCard } from "@/components/public/CyberCard";
-import { useGetPublicCatalogueQuery, useGetPublicProductTypesQuery } from "@/lib/publicApi";
+import { useGetPublicCatalogueQuery, useGetPublicProductTypesQuery, useGetPublicTagsQuery } from "@/lib/publicApi";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
     toggleCollection,
     toggleProductType,
     setSarcasmLevel,
+    initCollections,
     initProductTypes,
-    ALL_COLLECTIONS,
     ALL_TYPES,
-    type CollectionFilter,
     type ProductTypeFilter,
 } from "@/lib/slices/shopSlice";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
-
-const COLLECTION_META: Record<CollectionFilter, string> = {
-    SYNTAX: "(Human Chaos)",
-    HALLUCINATION: "(AI)",
-    PULSE: "(Live Data Stream)",
-};
 
 const TYPE_DETAILS: Record<string, { detail1: string; detail2: string }> = {
     "T-SHIRTS PREMIUM": { detail1: "Type: Premium DTG", detail2: "Material: 100% Organic" },
@@ -50,10 +43,22 @@ function getSoulScore(id: number): number {
     return ((id * 37 + 42) % 30) + 70; // deterministic 70–99
 }
 
-function getBadgeLabel(collection: CollectionFilter, soulScore: number): string {
-    if (collection === "SYNTAX") return `${soulScore}% HUMAN CHAOS`;
-    if (collection === "HALLUCINATION") return "AI HALLUCINATION DETECTED";
-    return "LIVE DATA STREAM";
+/** Parse le champ tags d'un CatalogueItem — supporte CSV "cyberpunk,glitch" et JSON '["cyberpunk","glitch"]' */
+function parseTags(raw: string | null): string[] {
+    if (!raw) return [];
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[")) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed.map((t: unknown) => String(t).trim().toLowerCase());
+        } catch { /* fallback CSV */ }
+    }
+    return trimmed.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+}
+
+function getBadgeLabel(firstTag: string, soulScore: number): string {
+    if (!firstTag) return `${soulScore}% DETECTED`;
+    return `${firstTag.toUpperCase()} // ${soulScore}`;
 }
 
 function getSarcasmLabel(level: number): string {
@@ -64,7 +69,7 @@ function getSarcasmLabel(level: number): string {
     return "'CRITICAL'";
 }
 
-// ── Custom checkbox ──────────────────────────────────────────────────────────
+// ── Custom checkbox (product types) ─────────────────────────────────────────
 
 function OvfCheckbox({
     checked,
@@ -105,6 +110,40 @@ function OvfCheckbox({
     );
 }
 
+// ── Tag checkbox (collections avec dot coloré) ────────────────────────────────
+
+function TagCheckbox({
+    checked,
+    label,
+    color,
+    onChange,
+}: {
+    checked: boolean;
+    label: string;
+    color: string;
+    onChange: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onChange}
+            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+        >
+            <span
+                className="w-3 h-3 flex-shrink-0 rounded-full border-2 transition-all"
+                style={{
+                    background: checked ? color : "transparent",
+                    borderColor: color,
+                    opacity: checked ? 1 : 0.4,
+                }}
+            />
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[#C0C0C0]">
+                {label}
+            </span>
+        </button>
+    );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function ShopPage() {
@@ -117,6 +156,14 @@ export default function ShopPage() {
 
     const { data, isLoading } = useGetPublicCatalogueQuery();
     const { data: ptData } = useGetPublicProductTypesQuery();
+    const { data: tagsData } = useGetPublicTagsQuery();
+
+    // Synchronise les collections (tags) depuis la DB dès le premier chargement
+    useEffect(() => {
+        if (tagsData?.result && tagsData.result.length > 0) {
+            dispatch(initCollections(tagsData.result.map((t) => t.slug)));
+        }
+    }, [tagsData, dispatch]);
 
     // Synchronise les types de produits depuis la DB dès le premier chargement
     useEffect(() => {
@@ -131,20 +178,15 @@ export default function ShopPage() {
     // Enrich products with derived metadata
     const enrichedProducts = useMemo(() => {
         if (!data?.result) return [];
-        return data.result.map((item, index) => {
-            const tagSlug = (item.tags ?? "").split(",")[0].trim().toUpperCase();
-            const collection: CollectionFilter =
-                tagSlug.includes("SYNTAX") ? "SYNTAX"
-                    : tagSlug.includes("HALLUCINATION") ? "HALLUCINATION"
-                        : tagSlug.includes("PULSE") ? "PULSE"
-                            : ALL_COLLECTIONS[index % ALL_COLLECTIONS.length];
+        return data.result.map((item) => {
+            const itemTags = parseTags(item.tags);
             const productType: string = item.product_type_name ?? "T-SHIRTS PREMIUM";
             const soulScore = getSoulScore(item.id);
             return {
                 ...item,
                 name: item.title,
                 thumbnail_url: assetUrl(item.image_url),
-                collection,
+                itemTags,
                 productType,
                 soulScore,
             };
@@ -155,7 +197,7 @@ export default function ShopPage() {
     const filteredProducts = useMemo(() => {
         return enrichedProducts.filter(
             (p) =>
-                selectedCollections.includes(p.collection) &&
+                (selectedCollections.length === 0 || selectedCollections.some((col) => p.itemTags.includes(col))) &&
                 (selectedProductTypes.length === 0 || selectedProductTypes.includes(p.productType))
         );
     }, [enrichedProducts, selectedCollections, selectedProductTypes]);
@@ -179,13 +221,13 @@ export default function ShopPage() {
                         <p className="text-[9px] uppercase tracking-[0.2em] text-[#8B8FA8] mb-1">
                             Collections
                         </p>
-                        {ALL_COLLECTIONS.map((col) => (
-                            <OvfCheckbox
-                                key={col}
-                                checked={selectedCollections.includes(col)}
-                                label={col}
-                                sublabel={COLLECTION_META[col]}
-                                onChange={() => dispatch(toggleCollection(col))}
+                        {(tagsData?.result ?? []).map((tag) => (
+                            <TagCheckbox
+                                key={tag.slug}
+                                checked={selectedCollections.includes(tag.slug)}
+                                label={tag.name}
+                                color={tag.color}
+                                onChange={() => dispatch(toggleCollection(tag.slug))}
                             />
                         ))}
                     </div>
@@ -275,9 +317,10 @@ export default function ShopPage() {
                         <div className="grid grid-cols-2 gap-4">
                             {filteredProducts.map((product, index) => {
                                 const details = TYPE_DETAILS[product.productType] ?? { detail1: product.productType, detail2: "" };
-                                const badgeLabel = getBadgeLabel(product.collection, product.soulScore);
+                                const firstTag = product.itemTags[0] ?? "";
+                                const badgeLabel = getBadgeLabel(firstTag, product.soulScore);
                                 const roastQuote = ROAST_QUOTES[index % ROAST_QUOTES.length];
-                                const badgeOrange = product.collection === "SYNTAX";
+                                const badgeOrange = product.itemTags.length > 0;
 
                                 return (
                                     <CyberCard

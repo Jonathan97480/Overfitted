@@ -127,6 +127,13 @@ export interface ProductTypePublic {
     description: string | null;
 }
 
+export interface TagPublic {
+    id: number;
+    name: string;
+    slug: string;
+    color: string;
+}
+
 export interface CatalogueProduct {
     id: number;
     title: string;
@@ -152,7 +159,7 @@ export const publicApi = createApi({
     baseQuery: fetchBaseQuery({
         baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
     }),
-    tagTypes: ["PublicProduct", "CatalogueProduct", "ProductType", "Me"],
+    tagTypes: ["PublicProduct", "CatalogueProduct", "ProductType", "Tag", "Me"],
     endpoints: (build) => ({
         getPublicProducts: build.query<
             { paging: { total: number; offset: number; limit: number }; result: PublicProduct[] },
@@ -183,6 +190,12 @@ export const publicApi = createApi({
         getPublicProductTypes: build.query<{ result: ProductTypePublic[] }, void>({
             query: () => "/api/catalogue/public/product-types",
             providesTags: ["ProductType"],
+        }),
+
+        // Tags publics (utilisés comme Collections dans le shop)
+        getPublicTags: build.query<{ result: TagPublic[] }, void>({
+            query: () => "/api/catalogue/public/tags",
+            providesTags: ["Tag"],
         }),
 
         // Upload validation (sync — returns DPI + metadata)
@@ -322,6 +335,7 @@ export const {
     useGetPublicCatalogueQuery,
     useGetPublicCatalogueByIdQuery,
     useGetPublicProductTypesQuery,
+    useGetPublicTagsQuery,
     useUploadImageMutation,
     useVectorizeImageMutation,
     useScoreSoulMutation,
