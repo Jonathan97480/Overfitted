@@ -158,6 +158,7 @@ export const publicApi = createApi({
     reducerPath: "publicApi",
     baseQuery: fetchBaseQuery({
         baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+        credentials: "include",   // envoie le cookie user_token sur toutes les requêtes
     }),
     tagTypes: ["PublicProduct", "CatalogueProduct", "ProductType", "Tag", "Me"],
     endpoints: (build) => ({

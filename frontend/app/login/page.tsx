@@ -72,14 +72,14 @@ function LoginContent() {
             // Cookie HttpOnly posé par le backend — redirect vers la page précédente
             router.push(nextUrl);
         } catch (err) {
-            const e = err as { data?: { detail?: string }; status?: number };
-            if (e.status === 401 || e.status === 403) {
+            const e = err as { data?: { detail?: string }; status?: number | string };
+            if (e.status === 401) {
                 setServerError("Email ou mot de passe incorrect.");
             } else if (e.status === 403) {
-                setServerError("Compte non activé — vérifiez votre email.");
+                setServerError("Compte désactivé — contactez le support.");
             } else {
                 setServerError(
-                    e.data?.detail ?? "Erreur de connexion."
+                    (e.data?.detail) ?? "Erreur de connexion. Vérifiez vos identifiants."
                 );
             }
         }
