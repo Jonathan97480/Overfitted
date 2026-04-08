@@ -53,16 +53,16 @@ export const shopSlice = createSlice({
             state.sarcasmLevel = action.payload;
         },
         // Appelé une seule fois au chargement des collections (tags) depuis la DB
-        initCollections(state, action: PayloadAction<string[]>) {
+        // Ne pré-sélectionne PAS tout — [] = pas de filtre = tout affiché
+        initCollections(state, _action: PayloadAction<string[]>) {
             if (!state.collectionsInitialized) {
-                state.selectedCollections = [...action.payload];
                 state.collectionsInitialized = true;
             }
         },
         // Appelé une seule fois au chargement des types depuis la DB
-        initProductTypes(state, action: PayloadAction<string[]>) {
+        // Ne pré-sélectionne PAS tout — [] = pas de filtre = tout affiché
+        initProductTypes(state, _action: PayloadAction<string[]>) {
             if (!state.productTypesInitialized) {
-                state.selectedProductTypes = [...action.payload];
                 state.productTypesInitialized = true;
             }
         },
