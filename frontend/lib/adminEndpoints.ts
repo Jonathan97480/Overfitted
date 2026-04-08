@@ -129,7 +129,7 @@ export interface CatalogueItemOut {
     description: string | null;
     image_url: string | null;
     price: number;
-    category: string | null;
+    category?: string | null;
     status: CatalogueStatus;
     printful_variant_id?: string | null;
     variants_json?: string | null;

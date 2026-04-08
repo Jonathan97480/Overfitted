@@ -8,11 +8,13 @@ import {
     useUploadCatalogueImageMutation,
     useProcessCatalogueImageMutation,
     useListTagsQuery,
+    useListProductTypesQuery,
     type CatalogueItemOut,
     type CatalogueStatus,
     type ImageUploadResult,
     type ImageProcessResult,
     type TagOut,
+    type ProductTypeOut,
 } from "@/lib/adminEndpoints";
 
 function TagPillSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -90,7 +92,7 @@ type FormData = {
     title: string;
     description: string;
     price: string;
-    category: string;
+    product_type_id: string | null;
     status: CatalogueStatus;
     printful_variant_id: string;
     tags: string;
@@ -101,7 +103,7 @@ const EMPTY: FormData = {
     title: "",
     description: "",
     price: "",
-    category: "",
+    product_type_id: null,
     status: "draft",
     printful_variant_id: "",
     tags: "",
@@ -110,6 +112,7 @@ const EMPTY: FormData = {
 
 export default function AdminCataloguePage() {
     const { data: items, isLoading } = useListCatalogueQuery({});
+    const { data: productTypes } = useListProductTypesQuery();
     const [createItem] = useCreateCatalogueItemMutation();
     const [updateItem] = useUpdateCatalogueItemMutation();
     const [deleteItem] = useDeleteCatalogueItemMutation();
@@ -144,7 +147,7 @@ export default function AdminCataloguePage() {
             title: item.title,
             description: item.description ?? "",
             price: String(item.price),
-            category: item.category ?? "",
+            product_type_id: item.product_type_id != null ? String(item.product_type_id) : "",
             status: item.status,
             printful_variant_id: item.printful_variant_id ?? "",
             tags: item.tags ?? "",
@@ -193,7 +196,7 @@ export default function AdminCataloguePage() {
                 description: form.description || null,
                 image_url: form.image_url || null,
                 price: parseFloat(form.price),
-                category: form.category || null,
+                product_type_id: form.product_type_id ? parseInt(form.product_type_id) : null,
                 status: form.status,
                 printful_variant_id: form.printful_variant_id || null,
                 tags: form.tags || null,
@@ -216,7 +219,7 @@ export default function AdminCataloguePage() {
     }
 
     const field = (key: keyof FormData) => ({
-        value: form[key],
+        value: (form[key] ?? "") as string,
         onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
             setForm((f) => ({ ...f, [key]: e.target.value })),
     });
@@ -265,7 +268,7 @@ export default function AdminCataloguePage() {
                                 Visuel
                             </TableHead>
                             <TableHead className="text-[var(--admin-muted-2)]">Titre</TableHead>
-                            <TableHead className="text-[var(--admin-muted-2)]">Catégorie</TableHead>
+                            <TableHead className="text-[var(--admin-muted-2)]">Type</TableHead>
                             <TableHead className="text-[var(--admin-muted-2)]">Prix</TableHead>
                             <TableHead className="text-[var(--admin-muted-2)]">Statut</TableHead>
                             <TableHead className="text-[var(--admin-muted-2)]">Tags</TableHead>
@@ -345,9 +348,9 @@ export default function AdminCataloguePage() {
                                                 </p>
                                             )}
                                         </TableCell>
-                                        {/* Catégorie */}
+                                        {/* Type produit */}
                                         <TableCell className="text-[var(--admin-muted-2)] text-sm">
-                                            {item.category ?? "—"}
+                                            {productTypes?.find((pt: ProductTypeOut) => pt.id === item.product_type_id)?.name ?? "—"}
                                         </TableCell>
                                         {/* Prix */}
                                         <TableCell className="text-white text-sm font-mono">
@@ -586,7 +589,7 @@ export default function AdminCataloguePage() {
                             />
                         </div>
 
-                        {/* Prix + Catégorie */}
+                        {/* Prix + Type produit */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs text-[var(--admin-muted-2)] mb-1">
@@ -608,19 +611,35 @@ export default function AdminCataloguePage() {
                             </div>
                             <div>
                                 <label className="block text-xs text-[var(--admin-muted-2)] mb-1">
-                                    Catégorie
+                                    Product Type
                                 </label>
-                                <input
-                                    type="text"
-                                    {...field("category")}
-                                    placeholder="t-shirt"
-                                    style={{
-                                        background: "var(--admin-sidebar)",
-                                        border: "1px solid var(--admin-border)",
-                                        color: "white",
-                                    }}
-                                    className="w-full px-3 py-2 rounded-md text-sm outline-none focus:ring-2 focus:ring-[var(--admin-accent)]"
-                                />
+                                <Select
+                                    value={form.product_type_id ?? ""}
+                                    onValueChange={(v) => setForm((f) => ({ ...f, product_type_id: v }))}
+                                >
+                                    <SelectTrigger
+                                        style={{
+                                            background: "var(--admin-sidebar)",
+                                            border: "1px solid var(--admin-border)",
+                                            color: form.product_type_id ? "white" : "var(--admin-muted-2)",
+                                        }}
+                                        className="w-full"
+                                    >
+                                        <SelectValue placeholder="— Sélectionner —" />
+                                    </SelectTrigger>
+                                    <SelectContent
+                                        style={{
+                                            background: "var(--admin-card)",
+                                            border: "1px solid var(--admin-border)",
+                                        }}
+                                    >
+                                        {(productTypes ?? []).map((pt: ProductTypeOut) => (
+                                            <SelectItem key={pt.id} value={String(pt.id)}>
+                                                {pt.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 
