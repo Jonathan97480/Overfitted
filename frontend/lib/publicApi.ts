@@ -157,7 +157,7 @@ export interface CatalogueProduct {
 export const publicApi = createApi({
     reducerPath: "publicApi",
     baseQuery: fetchBaseQuery({
-        baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+        baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "/api-backend",
         credentials: "include",   // envoie le cookie user_token sur toutes les requêtes
     }),
     tagTypes: ["PublicProduct", "CatalogueProduct", "ProductType", "Tag", "Me"],
@@ -256,6 +256,7 @@ export const publicApi = createApi({
                 body,
                 credentials: "include" as RequestCredentials,
             }),
+            invalidatesTags: ["Me"],
         }),
 
         // Auth — me (current user)
@@ -291,6 +292,7 @@ export const publicApi = createApi({
                 method: "POST",
                 credentials: "include" as RequestCredentials,
             }),
+            invalidatesTags: ["Me"],
         }),
 
         // Promo — valider un code promo

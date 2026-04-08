@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Proxy : toutes les requetes API transitent par le serveur Next.js (meme origine)
+  // elimine les problemes CORS et cookies cross-origin en dev
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+    return [
+      {
+        source: "/api-backend/:path*",
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
+  },
   allowedDevOrigins: ["192.168.1.30"],
   images: {
     remotePatterns: [
