@@ -3,15 +3,13 @@ import { useMemo, useEffect } from "react";
 import { assetUrl } from "@/lib/utils";
 import { AppHeader } from "@/components/public/AppHeader";
 import { AppFooter } from "@/components/public/AppFooter";
-import { OvfButton } from "@/components/public/OvfButton";
 import { CyberCard } from "@/components/public/CyberCard";
 import { useGetPublicCatalogueQuery, useGetPublicProductTypesQuery } from "@/lib/publicApi";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
-    togglePendingCollection,
-    togglePendingProductType,
-    setPendingSarcasmLevel,
-    applyFilters,
+    toggleCollection,
+    toggleProductType,
+    setSarcasmLevel,
     initProductTypes,
     ALL_COLLECTIONS,
     ALL_TYPES,
@@ -112,11 +110,9 @@ function OvfCheckbox({
 export default function ShopPage() {
     const dispatch = useAppDispatch();
     const {
-        pendingCollections,
-        pendingProductTypes,
-        pendingSarcasmLevel,
-        appliedCollections,
-        appliedProductTypes,
+        selectedCollections,
+        selectedProductTypes,
+        sarcasmLevel,
     } = useAppSelector((s) => s.shop);
 
     const { data, isLoading } = useGetPublicCatalogueQuery();
@@ -155,14 +151,14 @@ export default function ShopPage() {
         });
     }, [data?.result]);
 
-    // Apply filters — filtre uniquement sur collection + type produit
+    // Filtre réactif — se met à jour immédiatement à chaque changement de checkbox
     const filteredProducts = useMemo(() => {
         return enrichedProducts.filter(
             (p) =>
-                appliedCollections.includes(p.collection) &&
-                (appliedProductTypes.length === 0 || appliedProductTypes.includes(p.productType))
+                selectedCollections.includes(p.collection) &&
+                (selectedProductTypes.length === 0 || selectedProductTypes.includes(p.productType))
         );
-    }, [enrichedProducts, appliedCollections, appliedProductTypes]);
+    }, [enrichedProducts, selectedCollections, selectedProductTypes]);
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] font-mono flex flex-col">
@@ -186,10 +182,10 @@ export default function ShopPage() {
                         {ALL_COLLECTIONS.map((col) => (
                             <OvfCheckbox
                                 key={col}
-                                checked={pendingCollections.includes(col)}
+                                checked={selectedCollections.includes(col)}
                                 label={col}
                                 sublabel={COLLECTION_META[col]}
-                                onChange={() => dispatch(togglePendingCollection(col))}
+                                onChange={() => dispatch(toggleCollection(col))}
                             />
                         ))}
                     </div>
@@ -202,9 +198,9 @@ export default function ShopPage() {
                         {productTypeNames.map((t) => (
                             <OvfCheckbox
                                 key={t}
-                                checked={pendingProductTypes.includes(t)}
+                                checked={selectedProductTypes.includes(t)}
                                 label={t}
-                                onChange={() => dispatch(togglePendingProductType(t))}
+                                onChange={() => dispatch(toggleProductType(t))}
                             />
                         ))}
                     </div>
@@ -216,7 +212,7 @@ export default function ShopPage() {
                                 Sarcasm Level
                             </p>
                             <span className="text-[#FF6B00] text-[10px] font-bold">
-                                {pendingSarcasmLevel}%
+                                {sarcasmLevel}%
                             </span>
                         </div>
 
@@ -224,9 +220,9 @@ export default function ShopPage() {
                             type="range"
                             min={0}
                             max={100}
-                            value={pendingSarcasmLevel}
+                            value={sarcasmLevel}
                             onChange={(e) =>
-                                dispatch(setPendingSarcasmLevel(Number(e.target.value)))
+                                dispatch(setSarcasmLevel(Number(e.target.value)))
                             }
                             className="w-full h-1 bg-[#222] appearance-none cursor-pointer
                                 [&::-webkit-slider-thumb]:appearance-none
@@ -239,17 +235,9 @@ export default function ShopPage() {
                         />
 
                         <p className="text-[#FF6B00] text-[9px] font-mono text-center">
-                            {getSarcasmLabel(pendingSarcasmLevel)}
+                            {getSarcasmLabel(sarcasmLevel)}
                         </p>
                     </div>
-
-                    {/* Apply button */}
-                    <OvfButton
-                        className="mt-auto text-[10px] py-2"
-                        onClick={() => dispatch(applyFilters())}
-                    >
-                        Appliquer les Filtres
-                    </OvfButton>
                 </aside>
 
                 {/* ── Main content ── */}

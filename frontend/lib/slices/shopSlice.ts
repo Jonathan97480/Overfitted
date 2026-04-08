@@ -13,22 +13,16 @@ const ALL_TYPES: ProductTypeFilter[] = [
 ];
 
 interface ShopState {
-    pendingCollections: CollectionFilter[];
-    pendingProductTypes: ProductTypeFilter[];
-    pendingSarcasmLevel: number;
-    appliedCollections: CollectionFilter[];
-    appliedProductTypes: ProductTypeFilter[];
-    appliedSarcasmLevel: number;
+    selectedCollections: CollectionFilter[];
+    selectedProductTypes: ProductTypeFilter[];
+    sarcasmLevel: number;
     productTypesInitialized: boolean;
 }
 
 const initialState: ShopState = {
-    pendingCollections: [...ALL_COLLECTIONS],
-    pendingProductTypes: [],      // initialisé depuis la DB via initProductTypes
-    pendingSarcasmLevel: 75,
-    appliedCollections: [...ALL_COLLECTIONS],
-    appliedProductTypes: [],      // [] = affiche tout jusqu'à ce que la DB charge
-    appliedSarcasmLevel: 75,
+    selectedCollections: [...ALL_COLLECTIONS],
+    selectedProductTypes: [],  // [] = tous les produits affichés avant chargement DB
+    sarcasmLevel: 75,
     productTypesInitialized: false,
 };
 
@@ -36,37 +30,31 @@ export const shopSlice = createSlice({
     name: "shop",
     initialState,
     reducers: {
-        togglePendingCollection(state, action: PayloadAction<CollectionFilter>) {
+        toggleCollection(state, action: PayloadAction<CollectionFilter>) {
             const col = action.payload;
-            const idx = state.pendingCollections.indexOf(col);
+            const idx = state.selectedCollections.indexOf(col);
             if (idx >= 0) {
-                state.pendingCollections.splice(idx, 1);
+                state.selectedCollections.splice(idx, 1);
             } else {
-                state.pendingCollections.push(col);
+                state.selectedCollections.push(col);
             }
         },
-        togglePendingProductType(state, action: PayloadAction<ProductTypeFilter>) {
+        toggleProductType(state, action: PayloadAction<ProductTypeFilter>) {
             const t = action.payload;
-            const idx = state.pendingProductTypes.indexOf(t);
+            const idx = state.selectedProductTypes.indexOf(t);
             if (idx >= 0) {
-                state.pendingProductTypes.splice(idx, 1);
+                state.selectedProductTypes.splice(idx, 1);
             } else {
-                state.pendingProductTypes.push(t);
+                state.selectedProductTypes.push(t);
             }
         },
-        setPendingSarcasmLevel(state, action: PayloadAction<number>) {
-            state.pendingSarcasmLevel = action.payload;
-        },
-        applyFilters(state) {
-            state.appliedCollections = [...state.pendingCollections];
-            state.appliedProductTypes = [...state.pendingProductTypes];
-            state.appliedSarcasmLevel = state.pendingSarcasmLevel;
+        setSarcasmLevel(state, action: PayloadAction<number>) {
+            state.sarcasmLevel = action.payload;
         },
         // Appelé une seule fois au chargement des types depuis la DB
         initProductTypes(state, action: PayloadAction<string[]>) {
             if (!state.productTypesInitialized) {
-                state.pendingProductTypes = [...action.payload];
-                state.appliedProductTypes = [...action.payload];
+                state.selectedProductTypes = [...action.payload];
                 state.productTypesInitialized = true;
             }
         },
@@ -74,10 +62,9 @@ export const shopSlice = createSlice({
 });
 
 export const {
-    togglePendingCollection,
-    togglePendingProductType,
-    setPendingSarcasmLevel,
-    applyFilters,
+    toggleCollection,
+    toggleProductType,
+    setSarcasmLevel,
     initProductTypes,
 } = shopSlice.actions;
 
