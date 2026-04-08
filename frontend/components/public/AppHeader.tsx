@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, User } from "lucide-react";
+import { ShoppingCart, User, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/lib/hooks";
 import { selectCartItemCount } from "@/lib/slices/cartSlice";
+import { useGetMeQuery } from "@/lib/publicApi";
 import { useState, useEffect } from "react";
 
 const NAV = [
@@ -20,6 +21,7 @@ export function AppHeader() {
     const cartCount = useAppSelector(selectCartItemCount);
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
+    const { isSuccess: isLoggedIn } = useGetMeQuery();
 
     return (
         <header className="sticky top-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-sm border-b border-[#00F0FF]/20">
@@ -50,13 +52,23 @@ export function AppHeader() {
                             </span>
                         )}
                     </Link>
-                    <Link
-                        href="/login"
-                        className="text-[#888] hover:text-[#00F0FF] transition-colors"
-                        aria-label="Mon compte"
-                    >
-                        <User size={18} />
-                    </Link>
+                    {mounted && isLoggedIn ? (
+                        <Link
+                            href="/account/profile"
+                            className="text-[#00F0FF] hover:text-white transition-colors"
+                            aria-label="Mon profil"
+                        >
+                            <UserCheck size={18} />
+                        </Link>
+                    ) : (
+                        <Link
+                            href="/login"
+                            className="text-[#888] hover:text-[#00F0FF] transition-colors"
+                            aria-label="Se connecter"
+                        >
+                            <User size={18} />
+                        </Link>
+                    )}
                 </div>
             </div>
 
