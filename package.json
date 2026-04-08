@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "predev": "kill-port 3000 8000",
-    "dev": "concurrently --names \"BACK,FRONT\" --prefix-colors \"cyan,magenta\" --kill-others \"cd backend && .venv\\\\Scripts\\\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000\" \"cd frontend && npm run dev\""
+    "dev": "concurrently --names \"BACK,FRONT\" --prefix-colors \"cyan,magenta\" --kill-others \"npm run back\" \"npm run front\"",
+    "back": "backend\\.venv\\Scripts\\uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
+    "front": "npm --prefix frontend run dev -- --hostname 0.0.0.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
