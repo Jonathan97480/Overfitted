@@ -110,33 +110,34 @@ function OvfCheckbox({
     );
 }
 
-// ── Tag checkbox (collections avec dot coloré) ────────────────────────────────
+// ── Tag checkbox (collections — même style qu'OvfCheckbox) ──────────────────
 
 function TagCheckbox({
     checked,
     label,
-    color,
     onChange,
 }: {
     checked: boolean;
     label: string;
-    color: string;
+    color: string;  // conservé pour compatibilité appel — non utilisé dans le rendu
     onChange: () => void;
 }) {
     return (
         <button
             type="button"
             onClick={onChange}
-            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+            className="flex items-start gap-2 text-left hover:opacity-80 transition-opacity"
         >
             <span
-                className="w-3 h-3 flex-shrink-0 rounded-full border-2 transition-all"
-                style={{
-                    background: checked ? color : "transparent",
-                    borderColor: color,
-                    opacity: checked ? 1 : 0.4,
-                }}
-            />
+                className={cn(
+                    "mt-0.5 w-4 h-4 flex-shrink-0 border font-mono text-[10px] flex items-center justify-center leading-none select-none",
+                    checked
+                        ? "border-[#FF6B00] text-[#FF6B00] bg-[#FF6B00]/10"
+                        : "border-[#333] text-transparent"
+                )}
+            >
+                X
+            </span>
             <span className="font-mono text-[10px] uppercase tracking-wider text-[#C0C0C0]">
                 {label}
             </span>
