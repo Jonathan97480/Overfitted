@@ -7,15 +7,12 @@ import {
     useDeleteProductMutation,
     useSyncPrintfulProductsMutation,
     usePublishProductMutation,
-    useUploadCatalogueImageMutation,
-    useProcessCatalogueImageMutation,
     useGenerateMockupMutation,
     useGetMockupTemplatesQuery,
     useListShopDesignsQuery,
     type PrintfulTemplate,
     type ProductOut,
     type ShopDesignOut,
-    type ImageProcessResult,
 } from "@/lib/adminEndpoints";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -31,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Trash2, Plus, Upload, CheckCircle, AlertCircle, ImageIcon, RefreshCw, BookOpen, ChevronDown, ChevronRight, Send } from "lucide-react";
+import { Edit, Trash2, Plus, CheckCircle, ImageIcon, RefreshCw, BookOpen, ChevronDown, ChevronRight, Send } from "lucide-react";
 import { PrintfulCatalogModal } from "./PrintfulCatalogModal";
 import { assetUrl } from "@/lib/utils";
 
@@ -121,37 +118,7 @@ function StepInfos({ form, setForm }: { form: FormData; setForm: (f: FormData) =
 
 // ── Étape 2 — Image ─────────────────────────────────────────────────────────
 function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
-    const fileRef = useRef<HTMLInputElement>(null);
-    const [tab, setTab] = useState<"designs" | "upload">("designs");
-    const [uploadImage] = useUploadCatalogueImageMutation();
-    const [processImage] = useProcessCatalogueImageMutation();
-    const [processing, setProcessing] = useState<string | null>(null);
-    const [processResult, setProcessResult] = useState<ImageProcessResult | null>(null);
     const { data: shopDesigns, isLoading: shopDesignsLoading } = useListShopDesignsQuery();
-
-    const handleFile = async (file: File) => {
-        setProcessing("Chargement…");
-        const fd = new FormData();
-        fd.append("file", file);
-        try {
-            const r = await uploadImage(fd).unwrap();
-            setForm({ ...form, image_url: r.url, dpi: r.dpi, print_ready: r.print_ready });
-        } catch { /* ignore */ } finally { setProcessing(null); }
-    };
-
-    const handleProcess = async (removeBg: boolean) => {
-        if (!fileRef.current?.files?.[0]) return;
-        setProcessing(removeBg ? "Suppression fond…" : "Upscale 300 DPI…");
-        const fd = new FormData();
-        fd.append("file", fileRef.current.files[0]);
-        if (removeBg) fd.append("remove_bg", "true");
-        fd.append("upscale", "true");
-        try {
-            const r = await processImage(fd).unwrap();
-            setProcessResult(r);
-            setForm({ ...form, image_url: r.url, dpi: r.dpi, print_ready: r.print_ready });
-        } catch { /* ignore */ } finally { setProcessing(null); }
-    };
 
     const pickFromDesign = (item: ShopDesignOut) => {
         setForm({ ...form, image_url: assetUrl(item.url), dpi: item.dpi, print_ready: item.print_ready });
@@ -159,140 +126,46 @@ function StepImage({ form, setForm }: { form: FormData; setForm: (f: FormData) =
 
     return (
         <div className="space-y-3">
-            {/* Onglets */}
-            <div className="flex gap-1 p-1 rounded" style={{ background: "var(--admin-bg-2)" }}>
-                <button
-                    onClick={() => setTab("designs")}
-                    className="flex-1 text-xs py-1.5 rounded transition-colors"
-                    style={{
-                        background: tab === "designs" ? "var(--admin-accent)" : "transparent",
-                        color: tab === "designs" ? "#000" : "var(--admin-muted-2)",
-                        fontWeight: tab === "designs" ? 600 : 400,
-                    }}>
-                    Design Shop
-                </button>
-                <button
-                    onClick={() => setTab("upload")}
-                    className="flex-1 text-xs py-1.5 rounded transition-colors"
-                    style={{
-                        background: tab === "upload" ? "var(--admin-accent)" : "transparent",
-                        color: tab === "upload" ? "#000" : "var(--admin-muted-2)",
-                        fontWeight: tab === "upload" ? 600 : 400,
-                    }}>
-                    Uploader un fichier
-                </button>
-            </div>
-
-            {tab === "designs" && (
-                <div className="space-y-3">
-                    {shopDesignsLoading && <p className="text-xs text-[var(--admin-muted-2)] animate-pulse">Chargement des designs…</p>}
-                    {!shopDesignsLoading && (!shopDesigns || shopDesigns.length === 0) && (
-                        <p className="text-xs text-[var(--admin-muted-2)]">Aucun design dans le Design Shop. Uploadez-en depuis la page Design Shop.</p>
-                    )}
-                    {shopDesigns && shopDesigns.length > 0 && (
-                        <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
-                            {shopDesigns.map((item) => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => pickFromDesign(item)}
-                                    className="relative rounded overflow-hidden border-2 transition-all"
-                                    style={{
-                                        borderColor: form.image_url === assetUrl(item.url) ? "var(--admin-accent)" : "var(--admin-border)",
-                                        background: "var(--admin-bg-2)",
-                                    }}>
-                                    <img src={assetUrl(item.url)} alt={item.filename} className="w-full h-24 object-contain p-1" />
-                                    <p className="text-[10px] text-center pb-1 px-1 truncate" style={{ color: "var(--admin-muted-2)" }}>
-                                        {item.filename}
-                                    </p>
-                                    {item.print_ready && (
-                                        <div className="absolute top-1 left-1 bg-green-500 rounded-full w-2 h-2" title="Print ready" />
-                                    )}
-                                    {form.image_url === assetUrl(item.url) && (
-                                        <div className="absolute top-1 right-1">
-                                            <CheckCircle size={14} className="text-green-400" />
-                                        </div>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {form.image_url && (
-                        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
-                            style={{ background: "#22C55E18", border: "1px solid #22C55E" }}>
-                            <CheckCircle size={14} className="text-green-400" />
-                            <span style={{ color: "#22C55E" }}>Design sélectionné — déjà traité, prêt pour impression</span>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {tab === "upload" && (
-                <div className="space-y-3">
-                    <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-[var(--admin-accent)] transition-colors"
-                        style={{ borderColor: "var(--admin-border)" }}
-                        onClick={() => fileRef.current?.click()}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            const file = e.dataTransfer.files[0];
-                            if (file) {
-                                if (fileRef.current) { const dt = new DataTransfer(); dt.items.add(file); fileRef.current.files = dt.files; }
-                                handleFile(file);
-                            }
-                        }}>
-                        <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-                        {form.image_url ? (
-                            <div className="flex flex-col items-center gap-2">
-                                <img src={form.image_url} alt="" className="h-32 object-contain rounded" />
-                                <p className="text-xs text-[var(--admin-muted-2)]">Cliquer pour changer</p>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center gap-2 text-[var(--admin-muted-2)]">
-                                <ImageIcon size={32} />
-                                <p className="text-sm">Glisser-déposer ou cliquer</p>
-                                <p className="text-xs">JPG, PNG, WEBP — max 10 Mo</p>
-                            </div>
-                        )}
+            <div className="space-y-3">
+                {shopDesignsLoading && <p className="text-xs text-[var(--admin-muted-2)] animate-pulse">Chargement des designs…</p>}
+                {!shopDesignsLoading && (!shopDesigns || shopDesigns.length === 0) && (
+                    <p className="text-xs text-[var(--admin-muted-2)]">Aucun design dans le Design Shop. Uploadez-en depuis la page Design Shop.</p>
+                )}
+                {shopDesigns && shopDesigns.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                        {shopDesigns.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => pickFromDesign(item)}
+                                className="relative rounded overflow-hidden border-2 transition-all"
+                                style={{
+                                    borderColor: form.image_url === assetUrl(item.url) ? "var(--admin-accent)" : "var(--admin-border)",
+                                    background: "var(--admin-bg-2)",
+                                }}>
+                                <img src={assetUrl(item.url)} alt={item.filename} className="w-full h-24 object-contain p-1" />
+                                <p className="text-[10px] text-center pb-1 px-1 truncate" style={{ color: "var(--admin-muted-2)" }}>
+                                    {item.filename}
+                                </p>
+                                {item.print_ready && (
+                                    <div className="absolute top-1 left-1 bg-green-500 rounded-full w-2 h-2" title="Print ready" />
+                                )}
+                                {form.image_url === assetUrl(item.url) && (
+                                    <div className="absolute top-1 right-1">
+                                        <CheckCircle size={14} className="text-green-400" />
+                                    </div>
+                                )}
+                            </button>
+                        ))}
                     </div>
-                    {form.image_url && (
-                        <div className="flex gap-2 flex-wrap">
-                            <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(false)}
-                                style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
-                                <Upload size={14} className="mr-1" /> Upscale 300 DPI
-                            </Button>
-                            <Button variant="outline" size="sm" disabled={!!processing} onClick={() => handleProcess(true)}
-                                style={{ borderColor: "var(--admin-border)", color: "var(--admin-muted-2)" }}>
-                                <Upload size={14} className="mr-1" /> Supprimer fond
-                            </Button>
-                        </div>
-                    )}
-                    {processing && <p className="text-xs text-[var(--admin-accent)] animate-pulse">{processing}</p>}
-                    {form.dpi !== null && (
-                        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
-                            style={{
-                                background: form.print_ready ? "#22C55E18" : "#F59E0B18",
-                                border: `1px solid ${form.print_ready ? "#22C55E" : "#F59E0B40"}`,
-                            }}>
-                            {form.print_ready
-                                ? <CheckCircle size={14} className="text-green-400" />
-                                : <AlertCircle size={14} style={{ color: "#F59E0B" }} />}
-                            <span style={{ color: form.print_ready ? "#22C55E" : "#F59E0B" }}>
-                                {form.dpi} DPI —{" "}
-                                {form.print_ready
-                                    ? "Prêt pour impression"
-                                    : "Résolution faible — utilisez « Upscale 300 DPI » ci-dessus"}
-                            </span>
-                            {processResult && (
-                                <span className="ml-2 text-[var(--admin-muted-2)]">
-                                    {processResult.bg_removed && "• fond supprimé "}
-                                    {processResult.upscaled && "• upscalé"}
-                                </span>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
+                )}
+                {form.image_url && (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded"
+                        style={{ background: "#22C55E18", border: "1px solid #22C55E" }}>
+                        <CheckCircle size={14} className="text-green-400" />
+                        <span style={{ color: "#22C55E" }}>Design sélectionné — déjà traité, prêt pour impression</span>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
